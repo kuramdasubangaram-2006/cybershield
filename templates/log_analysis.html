@@ -1,0 +1,38 @@
+{% extends "dashboard_base.html" %}
+{% block content %}
+  <section class="welcome-row">
+    <div><p class="eyebrow">ANALYSIS TOOL</p><h2>Log Analysis</h2><p>Look for a few common authentication and account activity phrases.</p></div>
+    <span class="panel-tag">LOCAL KEYWORD CHECKS</span>
+  </section>
+
+  <section class="content-panel scanner-panel">
+    <div class="panel-heading"><div><h3>Paste log lines to review</h3><p>Up to 1,000 lines or 20,000 characters per review.</p></div></div>
+    <form class="log-form" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="form-label" for="log_text">Log text</label>
+      <textarea class="form-control log-textarea" id="log_text" name="log_text" rows="9" maxlength="20000" placeholder="Paste a small log sample here…" required>{{ submitted_text }}</textarea>
+      <button class="btn sign-in-button log-submit-button" type="submit">Analyze logs <span aria-hidden="true">→</span></button>
+    </form>
+    <p class="scanner-privacy-note"><span class="secure-dot"></span> The submitted lines are checked in memory and not saved. Only the line count, result, and summary are added to your account history. Avoid pasting passwords, tokens, or other secrets.</p>
+  </section>
+
+  {% if result %}
+    <section class="content-panel result-panel" aria-live="polite">
+      <div class="result-topline">
+        <div><p class="eyebrow">ANALYSIS RESULT</p><h3>{{ result.label }}</h3></div>
+        <span class="risk-pill risk-{{ result.risk|lower|replace(' ', '-') }}">{{ result.risk }}</span>
+      </div>
+      <p class="result-summary">{{ result.summary }}</p>
+      <div class="log-count-grid">
+        <div><span>Lines reviewed</span><strong>{{ result.line_count }}</strong></div>
+        <div><span>Authentication failures</span><strong>{{ result.counts.authentication_failures }}</strong></div>
+        <div><span>Successful login phrases</span><strong>{{ result.counts.successful_logins }}</strong></div>
+        <div><span>Privileged command phrases</span><strong>{{ result.counts.privileged_events }}</strong></div>
+        <div><span>Account change phrases</span><strong>{{ result.counts.account_changes }}</strong></div>
+      </div>
+      <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
+    </section>
+  {% endif %}
+
+  <section class="scanner-disclaimer"><strong>Important:</strong> These simple keyword checks can miss events or flag normal activity. “No matching patterns” does not mean a system is safe; review findings in context.</section>
+{% endblock %}

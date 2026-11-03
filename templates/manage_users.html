@@ -1,0 +1,26 @@
+{% extends "dashboard_base.html" %}
+{% set page_title = "Manage users" %}
+{% block content %}
+  <section class="welcome-row">
+    <div><p class="eyebrow">ADMIN CONTROLS</p><h2>User accounts</h2><p>Create user accounts. New accounts can view their own activity only.</p></div>
+    <span class="panel-tag">ADMIN ONLY</span>
+  </section>
+
+  <section class="content-panel create-user-panel">
+    <div class="panel-heading"><div><h3>Create a user account</h3><p>Users cannot choose or change their own role.</p></div></div>
+    <form class="create-user-form" method="post" action="{{ url_for('manage_users') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label class="form-label" for="email">User email</label><input class="form-control" id="email" name="email" type="email" placeholder="user@example.com" maxlength="254" required></div>
+      <div><label class="form-label" for="password">Temporary password</label><input class="form-control" id="password" name="password" type="password" placeholder="At least 12 characters" minlength="12" required></div>
+      <button class="btn sign-in-button create-user-button" type="submit">Create user <span aria-hidden="true">→</span></button>
+    </form>
+    <p class="role-note left-note">Share the temporary password directly with the user and ask them to change it after signing in. Password reset/change is a follow-up item.</p>
+  </section>
+
+  <section class="content-panel">
+    <div class="panel-heading"><div><h3>All accounts</h3><p>Visible only to administrators.</p></div><span class="panel-tag">{{ users|length }} ACCOUNTS</span></div>
+    <div class="table-responsive"><table class="data-table"><thead><tr><th>Email</th><th>Role</th><th>Scans</th><th>Created</th></tr></thead><tbody>
+      {% for account in users %}<tr><td>{{ account.email }}</td><td><span class="role-pill role-{{ account.role }}">{{ account.role|upper }}</span></td><td>{{ account.scan_count }}</td><td>{{ account.created_at|ist_datetime }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+{% endblock %}

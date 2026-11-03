@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#08111f">
+    <title>Sign in | CyberShield</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+  </head>
+  <body class="login-page">
+    <main class="login-layout">
+      <section class="brand-panel" aria-label="About CyberShield">
+        <a class="brand" href="/" aria-label="CyberShield home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 40 40" fill="none">
+              <path d="M20 3.5 34 9v10.2c0 8.2-5.5 14.1-14 17.3-8.5-3.2-14-9.1-14-17.3V9l14-5.5Z" stroke="currentColor" stroke-width="2.5" />
+              <path d="m13.5 20.5 4.2 4.2 9-9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <span>CYBER<span class="brand-accent">SHIELD</span></span>
+        </a>
+
+        <div class="brand-copy">
+          <p class="eyebrow">SECURITY OPERATIONS WORKSPACE</p>
+          <h1>See the signal.<br><span>Stay in control.</span></h1>
+          <p class="brand-description">A clear workspace for reviewing security activity and investigating potential threats.</p>
+
+          <div class="feature-list" aria-label="CyberShield features">
+            <div class="feature-item"><span class="feature-dot"></span>Threat analysis tools</div>
+            <div class="feature-item"><span class="feature-dot"></span>Security alerts and history</div>
+            <div class="feature-item"><span class="feature-dot"></span>Account-based access</div>
+          </div>
+        </div>
+
+        <p class="brand-footnote">Your account access level will be assigned securely.</p>
+      </section>
+
+      <section class="form-panel" aria-labelledby="login-heading">
+        <div class="login-card">
+          <div class="mobile-brand brand" aria-hidden="true">
+            <span class="brand-mark">
+              <svg viewBox="0 0 40 40" fill="none">
+                <path d="M20 3.5 34 9v10.2c0 8.2-5.5 14.1-14 17.3-8.5-3.2-14-9.1-14-17.3V9l14-5.5Z" stroke="currentColor" stroke-width="2.5" />
+                <path d="m13.5 20.5 4.2 4.2 9-9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <span>CYBER<span class="brand-accent">SHIELD</span></span>
+          </div>
+
+          <div class="form-heading">
+            <span class="secure-label"><span class="secure-dot"></span> SECURE SIGN IN</span>
+            <h2 id="login-heading">Welcome back</h2>
+            <p>Sign in to continue to your CyberShield workspace.</p>
+          </div>
+
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+              <div class="form-alert form-alert-{{ category }}" role="alert">{{ message }}</div>
+            {% endfor %}
+          {% endwith %}
+
+          <form id="login-form" method="post" action="{{ url_for('login') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="mb-3">
+              <label class="form-label" for="email">Email address</label>
+              <input class="form-control" id="email" name="email" type="email" placeholder="you@example.com" autocomplete="username" required>
+            </div>
+
+            <div class="mb-2">
+              <div class="password-label-row">
+                <label class="form-label" for="password">Password</label>
+                <button class="text-link" id="forgot-password" type="button">Forgot password?</button>
+              </div>
+              <div class="password-input-wrap">
+                <input class="form-control" id="password" name="password" type="password" placeholder="Enter your password" autocomplete="current-password" required>
+                <button class="password-toggle" id="toggle-password" type="button" aria-label="Show password" aria-pressed="false">Show</button>
+              </div>
+            </div>
+
+            <div class="form-check remember-row">
+              <input class="form-check-input" id="remember" name="remember" type="checkbox">
+              <label class="form-check-label" for="remember">Remember this device</label>
+            </div>
+
+            <button class="btn sign-in-button w-100" type="submit">Sign in <span aria-hidden="true">→</span></button>
+            <p class="form-message d-none" id="form-message" role="status" aria-live="polite"></p>
+          </form>
+
+          <div class="login-divider"><span></span><small>CYBERSHIELD ACCESS</small><span></span></div>
+          <p class="account-note">Need an account? Ask your CyberShield administrator.</p>
+          <p class="role-note">Admins manage the workspace. Users see only their own activity.</p>
+        </div>
+        <footer class="form-footer">CyberShield <span>•</span> Threat Detection &amp; Security Analysis</footer>
+      </section>
+    </main>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  </body>
+</html>

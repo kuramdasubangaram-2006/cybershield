@@ -1,0 +1,25 @@
+{% extends "dashboard_base.html" %}
+{% set page_title = "My dashboard" %}
+{% block content %}
+  <section class="welcome-row">
+    <div><p class="eyebrow">YOUR SECURITY ACTIVITY</p><h2>Welcome to your workspace</h2><p>Your scans and alerts are private to your account.</p></div>
+    <span class="panel-tag user-tag">USER VIEW</span>
+  </section>
+
+  <section class="metric-grid" aria-label="Your statistics">
+    <article class="metric-card"><span class="metric-icon cyan">⌕</span><p>My scans</p><strong>{{ scan_count }}</strong><small>Scans created by your account</small></article>
+    <article class="metric-card"><span class="metric-icon amber">◉</span><p>My high-risk findings</p><strong>{{ alert_count }}</strong><small>High or critical results</small></article>
+    <article class="metric-card privacy-card"><span class="metric-icon green">✓</span><p>Account privacy</p><strong>On</strong><small>Only your activity is shown here</small></article>
+  </section>
+
+  <section class="content-panel">
+    <div class="panel-heading"><div><h3>My recent activity</h3><p>Only records owned by your account are listed.</p></div></div>
+    {% if recent_scans %}
+      <div class="table-responsive"><table class="data-table"><thead><tr><th>Module</th><th>Target</th><th>Risk</th><th>Time (IST)</th></tr></thead><tbody>
+        {% for scan in recent_scans %}<tr><td>{{ scan.module }}</td><td>{{ scan.target }}</td><td><span class="risk-pill risk-{{ scan.risk|lower }}">{{ scan.risk }}</span></td><td>{{ scan.created_at|ist_datetime }}</td></tr>{% endfor %}
+      </tbody></table></div>
+    {% else %}
+      <div class="empty-state"><span class="empty-icon">⌕</span><strong>Your activity will appear here</strong><p>Analysis tools are being added. When you scan something, only your records will show on this dashboard.</p></div>
+    {% endif %}
+  </section>
+{% endblock %}

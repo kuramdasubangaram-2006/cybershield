@@ -1,0 +1,26 @@
+{% extends "dashboard_base.html" %}
+{% block content %}
+  <section class="welcome-row">
+    <div><p class="eyebrow">REPORT CENTER</p><h2>Scan Reports</h2><p>{% if admin_view %}Summary across all accounts.{% else %}Summary of scans saved to your account.{% endif %}</p></div>
+    <a class="primary-link" href="{{ url_for('download_report') }}">Download CSV <span aria-hidden="true">↓</span></a>
+  </section>
+
+  <section class="metric-grid">
+    <article class="metric-card"><span class="metric-icon cyan">▤</span><p>Total scans</p><strong>{{ scans|length }}</strong><small>Included in this report</small></article>
+    <article class="metric-card"><span class="metric-icon amber">!</span><p>Items for review</p><strong>{{ review_count }}</strong><small>Review, High, or Critical</small></article>
+    <article class="metric-card"><span class="metric-icon blue">?</span><p>Unverified</p><strong>{{ unverified_count }}</strong><small>Unknown reputation or result</small></article>
+  </section>
+
+  <section class="content-panel">
+    <div class="panel-heading"><div><h3>Scans by module</h3><p>Counts for the records visible to your account.</p></div></div>
+    {% if module_counts %}
+      <div class="table-responsive"><table class="data-table"><thead><tr><th>Module</th><th>Scan count</th></tr></thead><tbody>
+        {% for module, count in module_counts|dictsort %}<tr><td>{{ module }}</td><td>{{ count }}</td></tr>{% endfor %}
+      </tbody></table></div>
+    {% else %}
+      <div class="empty-state"><strong>No scans to report yet</strong><p>After you use an analysis tool, its result will be included here.</p></div>
+    {% endif %}
+  </section>
+
+  <section class="scanner-disclaimer"><strong>Report scope:</strong> Admins can export all accounts' scan summaries. Users can export only their own. Original uploaded files and pasted log text are not included.</section>
+{% endblock %}

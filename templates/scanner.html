@@ -1,0 +1,37 @@
+{% extends "dashboard_base.html" %}
+{% block content %}
+  <section class="welcome-row">
+    <div><p class="eyebrow">ANALYSIS TOOL</p><h2>{{ module }}</h2><p>{{ description }}</p></div>
+    <span class="panel-tag">LOCAL CHECKS ONLY</span>
+  </section>
+
+  <section class="content-panel scanner-panel">
+    <div class="panel-heading"><div><h3>Enter a value to review</h3><p>Your result is saved to your account history.</p></div></div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}<div class="form-alert form-alert-{{ category }}" role="alert">{{ message }}</div>{% endfor %}
+    {% endwith %}
+    <form class="scanner-form" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="form-label" for="target">{% if module == 'IP Detection' %}IPv4 or IPv6 address{% else %}Website URL{% endif %}</label>
+      <div class="scanner-input-row">
+        <input class="form-control" id="target" name="target" type="text" value="{{ submitted_value }}" placeholder="{% if module == 'IP Detection' %}Example: 8.8.8.8{% else %}Example: https://example.com{% endif %}" required maxlength="{% if module == 'IP Detection' %}64{% else %}2048{% endif %}" autocomplete="off" spellcheck="false">
+        <button class="btn sign-in-button scanner-button" type="submit">Analyze <span aria-hidden="true">→</span></button>
+      </div>
+    </form>
+    <p class="scanner-privacy-note"><span class="secure-dot"></span> This tool does not contact the IP address or open the URL. It checks the input locally.</p>
+  </section>
+
+  {% if result %}
+    <section class="content-panel result-panel" aria-live="polite">
+      <div class="result-topline">
+        <div><p class="eyebrow">ANALYSIS RESULT</p><h3>{{ result.label }}</h3></div>
+        <span class="risk-pill risk-{{ result.risk|lower|replace(' ', '-') }}">{{ result.risk }}</span>
+      </div>
+      <p class="result-target">{{ result.target }}</p>
+      <p class="result-summary">{{ result.summary }}</p>
+      <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
+    </section>
+  {% endif %}
+
+  <section class="scanner-disclaimer"><strong>Important:</strong> These are basic local indicators, not a live threat-intelligence or antivirus verdict. Treat “Unverified” as unknown, not safe.</section>
+{% endblock %}
