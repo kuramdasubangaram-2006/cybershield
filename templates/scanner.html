@@ -2,7 +2,7 @@
 {% block content %}
   <section class="welcome-row">
     <div><p class="eyebrow">ANALYSIS TOOL</p><h2>{{ module }}</h2><p>{{ description }}</p></div>
-    <span class="panel-tag">LOCAL CHECKS ONLY</span>
+    <span class="panel-tag">{% if module == 'URL Scanner' %}LIMITED WEBSITE REVIEW{% else %}LOCAL CHECKS ONLY{% endif %}</span>
   </section>
 
   <section class="content-panel scanner-panel">
@@ -18,7 +18,7 @@
         <button class="btn sign-in-button scanner-button" type="submit">Analyze <span aria-hidden="true">→</span></button>
       </div>
     </form>
-    <p class="scanner-privacy-note"><span class="secure-dot"></span> This tool does not contact the IP address or open the URL. It checks the input locally.</p>
+    <p class="scanner-privacy-note"><span class="secure-dot"></span>{% if module == 'URL Scanner' %} A limited read-only request contacts the public website for page details; the site may log the request. CyberShield does not run scripts, submit forms, or fetch linked files.{% else %} This tool does not contact the IP address. It checks the input locally.{% endif %}</p>
   </section>
 
   {% if result %}

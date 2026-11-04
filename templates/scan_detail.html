@@ -5,6 +5,17 @@
     <span class="risk-pill risk-{{ scan.risk|risk_level|lower }}">{{ scan.risk|risk_level }}</span>
   </section>
 
+  {% if details.site_explanation %}
+    <section class="content-panel">
+      <div class="panel-heading"><div><h3>Website response details</h3><p>Public page metadata only; no scripts or linked files were run or fetched.</p></div></div>
+      <p class="result-summary">{{ details.site_explanation }}</p>
+      {% if details.facts.get('Advertised preview image host') %}<p class="scanner-privacy-note">The page advertises a preview image from {{ details.facts.get('Advertised preview image host') }}. The image itself was not loaded.</p>{% endif %}
+      {% if details.redirect_chain %}
+        <div class="indicator-block"><h4>Redirect path</h4><ol class="detail-list">{% for hop in details.redirect_chain %}<li><code>{{ hop }}</code></li>{% endfor %}</ol></div>
+      {% endif %}
+    </section>
+  {% endif %}
+
   <section class="content-panel">
     <div class="panel-heading"><div><h3>What was reviewed</h3><p>{{ scan.created_at|ist_datetime }} IST</p></div></div>
     <p class="result-target">{{ scan.target }}</p>
@@ -12,7 +23,8 @@
     <div class="indicator-block detail-explanation"><h4>Detailed explanation</h4><p>{{ details.explanation or "Detailed findings are not available for this older scan. New scans include the checks and recommendations." }}</p></div>
     <p class="role-note left-note">
       {% if scan.module == 'IP Detection' %}Address format and network range were checked locally; the IP was not contacted and no reputation lookup was made.
-      {% elif scan.module == 'URL Scanner' %}URL structure was checked locally; the website was not opened or contacted.
+      {% elif scan.module == 'URL Scanner' and details.site_explanation %}A limited read-only request gathered public page metadata; JavaScript was not run, forms were not submitted, and linked files were not fetched.
+      {% elif scan.module == 'URL Scanner' %}URL structure was checked locally; this older scan did not gather live website details.
       {% elif scan.module == 'File Analyzer' %}A short file signature and metadata were checked in memory; the file was not saved, executed, or antivirus-scanned.
       {% elif scan.module == 'Log Analysis' %}Common keyword patterns were counted; the original pasted log text was not saved.
       {% endif %}

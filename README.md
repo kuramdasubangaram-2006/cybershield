@@ -8,7 +8,7 @@ CyberShield is a Flask web app for basic security checks, account management, an
 - Users can hide scans from their own account history while Admins retain visibility until the 24-hour expiry or Admin deletion. Admins can separately clear all User scans or all Admin scans.
 - Users can change their password; Admins can set a temporary password for User accounts.
 - IP address format and address-range checks.
-- URL structure checks that do not open or contact the submitted site.
+- URL structure checks plus a bounded, read-only request for public page metadata. The scanner does not run page scripts, submit forms, crawl links, or download linked files.
 - File metadata and signature checks performed in memory.
 - Basic keyword checks for pasted log text.
 - Scan history, alerts, and downloadable reports.
@@ -52,6 +52,7 @@ To deploy updates, push changes to `master`. Render syncs the Blueprint and rede
 - User scan history is scoped to the signed-in account. Admin pages are protected on the Flask server.
 - Responses include browser security headers, and signed-in pages are marked not to be cached.
 - Uploaded files are checked in memory and are not saved or executed. Their name, hash, type, size, and findings are stored in account history. Pasted log text is not stored; only summarized counts and findings are saved.
+- URL scans contact the submitted public site and may be recorded by that site. Only selected response metadata is stored; the fetched page body is not retained.
 - `.env`, `.venv/`, and `instance/` are excluded from Git.
 
 ## Configuration

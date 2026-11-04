@@ -4,6 +4,7 @@ from functools import wraps
 import csv
 import hashlib
 import hmac
+import http.client
 import io
 import json
 import os
@@ -30,6 +31,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from database import INTEGRITY_ERRORS, close_db, get_db, init_db
 from detectors import analyze_file, analyze_ip, analyze_logs, analyze_url
+from site_inspector import inspect_public_site
 
 
 load_dotenv()
@@ -52,10 +54,36 @@ def risk_level(value):
 def persisted_analysis_details(result):
     """Keep derived findings only; never persist uploaded bytes or pasted log text."""
     allowed = {
-        "label", "explanation", "indicators", "recommendations", "facts", "line_count", "counts",
-        "file_type", "size", "sha256",
+        "label", "explanation", "site_explanation", "redirect_chain", "indicators", "recommendations",
+        "facts", "line_count", "counts", "file_type", "size", "sha256",
     }
     return {key: value for key, value in result.items() if key in allowed}
+
+
+def analyze_url_live(value):
+    result = analyze_url(value)
+    try:
+        site = inspect_public_site(value)
+    except (OSError, ValueError, http.client.HTTPException):
+        result["facts"]["Live website review"] = "Not completed"
+        result["indicators"].append("Live page details could not be gathered; the risk label uses local URL checks only.")
+        result["site_explanation"] = "The live request did not complete. No page content or reputation data was available for this review."
+        result["explanation"] = "CyberShield checked the URL structure locally and attempted a limited read-only request, but the website details could not be gathered. No threat-reputation source was checked."
+        result["recommendations"].append("Verify the website address independently before entering sensitive information.")
+        return result
+
+    result["facts"].update(site["facts"])
+    result["indicators"].extend(site["indicators"])
+    result["recommendations"].extend(site["recommendations"])
+    result["site_explanation"] = site["explanation"]
+    result["explanation"] = "CyberShield checked URL structure and fetched limited public page metadata. It did not compare the URL with threat-intelligence reports, so the findings are not a safety verdict."
+    result["redirect_chain"] = site["redirect_chain"]
+    if site.get("password_form_over_http"):
+        result["risk"] = "High"
+        result["label"] = "Password form served without HTTPS"
+        result["summary"] = "The page includes a password field but its final destination is not using HTTPS."
+        result["recommendations"].insert(0, "Do not enter a password on this page. Verify the correct HTTPS address independently.")
+    return result
 
 
 def create_app():
@@ -290,8 +318,8 @@ def create_app():
         return run_scan_page(
             module="URL Scanner",
             page_title="URL Scanner",
-            description="Review URL structure without opening or contacting the submitted site.",
-            analyzer=analyze_url,
+            description="Review URL structure and limited public website details.",
+            analyzer=analyze_url_live,
         )
 
     @app.route("/tools/file", methods=["GET", "POST"])
