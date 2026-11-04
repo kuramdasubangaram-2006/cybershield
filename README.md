@@ -43,7 +43,7 @@ Open `http://127.0.0.1:5000/`. If the selected database has no administrator acc
 
 By default, local development uses SQLite in `instance/cybershield.sqlite3`. To use Supabase locally, set `DATABASE_URL` in `.env` to the PostgreSQL connection string and apply `supabase_schema.sql` in the Supabase SQL Editor first. Keep `.env` private; it is excluded by `.gitignore`.
 
-Forgot-password email delivery requires SMTP settings (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and optionally `SMTP_FROM`). Set these values in the local `.env` or Render's private environment settings. SMTP is sent over TLS; never commit the mail password. Existing hosted databases also need `supabase_password_reset.sql` run once before deploying the password-recovery update.
+Forgot-password email delivery uses the Brevo transactional email API over HTTPS. Set `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` in the local `.env` or Render's private environment settings. Use a verified Brevo sender and keep the API key private; never commit it. Render's free web services block outbound SMTP ports, so SMTP credentials cannot be used from the free service. Existing hosted databases also need `supabase_password_reset.sql` run once before deploying the password-recovery update.
 
 For an existing hosted CyberShield Supabase database, run `supabase_app_controls.sql` once in the SQL Editor before deploying updates. It creates the private admin activity and scan-limit tables.
 

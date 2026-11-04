@@ -2,7 +2,6 @@
 
 from functools import wraps
 import csv
-from email.message import EmailMessage
 import hashlib
 import hmac
 import http.client
@@ -10,8 +9,6 @@ import io
 import json
 import os
 import secrets
-import smtplib
-import ssl
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -97,11 +94,8 @@ def create_app():
         SECRET_KEY=load_secret_key(app.instance_path),
         DATABASE=os.path.join(app.instance_path, "cybershield.sqlite3"),
         DATABASE_URL=os.getenv("DATABASE_URL", "").strip(),
-        SMTP_HOST=os.getenv("SMTP_HOST", "").strip(),
-        SMTP_PORT=os.getenv("SMTP_PORT", "587").strip(),
-        SMTP_USER=os.getenv("SMTP_USER", "").strip(),
-        SMTP_PASSWORD=os.getenv("SMTP_PASSWORD", ""),
-        SMTP_FROM=os.getenv("SMTP_FROM", "").strip(),
+        BREVO_API_KEY=os.getenv("BREVO_API_KEY", "").strip(),
+        BREVO_SENDER_EMAIL=os.getenv("BREVO_SENDER_EMAIL", "").strip(),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE", "0") == "1",
@@ -222,8 +216,8 @@ def create_app():
             email = request.form.get("email", "").strip().lower()
             if not valid_email(email):
                 flash("Enter the email address for your CyberShield account.", "error")
-            elif not smtp_is_configured():
-                flash("Email delivery is not configured yet. Ask the administrator to configure SMTP in Render.", "error")
+            elif not brevo_is_configured():
+                flash("Email delivery is not configured yet. Ask the administrator to configure email delivery in Render.", "error")
             else:
                 account = get_db().execute(
                     "SELECT id, email FROM users WHERE LOWER(email) = LOWER(?)", (email,)
@@ -819,50 +813,53 @@ def csrf_token():
     return token
 
 
-def smtp_is_configured():
-    try:
-        port = int(current_app.config.get("SMTP_PORT", "587"))
-    except (TypeError, ValueError):
-        return False
+def brevo_is_configured():
     return bool(
-        current_app.config.get("SMTP_HOST")
-        and current_app.config.get("SMTP_USER")
-        and current_app.config.get("SMTP_PASSWORD")
-        and 1 <= port <= 65535
+        current_app.config.get("BREVO_API_KEY")
+        and current_app.config.get("BREVO_SENDER_EMAIL")
     )
 
 
 def send_password_reset_email(recipient, code):
-    if not smtp_is_configured():
+    if not brevo_is_configured():
         return False
-    host = current_app.config["SMTP_HOST"]
-    port = int(current_app.config["SMTP_PORT"])
-    username = current_app.config["SMTP_USER"]
-    password = current_app.config["SMTP_PASSWORD"]
-    sender = current_app.config.get("SMTP_FROM") or username
-    message = EmailMessage()
-    message["Subject"] = "Your CyberShield password reset code"
-    message["From"] = sender
-    message["To"] = recipient
-    message.set_content(
-        f"Your CyberShield password reset code is {code}.\n\n"
-        "It expires in 10 minutes and can be used only once. If you did not request it, ignore this email."
-    )
+    api_key = current_app.config["BREVO_API_KEY"]
+    sender_email = current_app.config["BREVO_SENDER_EMAIL"]
+    payload = json.dumps({
+        "sender": {"name": "CyberShield", "email": sender_email},
+        "to": [{"email": recipient}],
+        "subject": "Your CyberShield password reset code",
+        "textContent": (
+            f"Your CyberShield password reset code is {code}.\n\n"
+            "It expires in 10 minutes and can be used only once. If you did not request it, ignore this email."
+        ),
+    })
+    connection = None
     try:
-        if port == 465:
-            with smtplib.SMTP_SSL(host, port, timeout=12, context=ssl.create_default_context()) as server:
-                server.login(username, password)
-                server.send_message(message)
-        else:
-            with smtplib.SMTP(host, port, timeout=12) as server:
-                server.ehlo()
-                server.starttls(context=ssl.create_default_context())
-                server.ehlo()
-                server.login(username, password)
-                server.send_message(message)
-    except (OSError, smtplib.SMTPException, ValueError):
-        current_app.logger.error("Password reset email delivery failed.")
+        connection = http.client.HTTPSConnection("api.brevo.com", timeout=15)
+        connection.request(
+            "POST",
+            "/v3/smtp/email",
+            body=payload,
+            headers={
+                "accept": "application/json",
+                "api-key": api_key,
+                "content-type": "application/json",
+            },
+        )
+        response = connection.getresponse()
+        response.read()
+        if not 200 <= response.status < 300:
+            current_app.logger.error(
+                "Brevo password reset delivery failed (HTTP %s).", response.status
+            )
+            return False
+    except (OSError, http.client.HTTPException, ValueError):
+        current_app.logger.error("Brevo password reset request failed before acceptance.")
         return False
+    finally:
+        if connection is not None:
+            connection.close()
     return True
 
 
