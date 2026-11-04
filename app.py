@@ -198,14 +198,16 @@ def create_app():
         db = get_db()
         user_id = user["id"]
         scan_count = db.execute(
-            "SELECT COUNT(*) AS count FROM scans WHERE user_id = ?", (user_id,)
+            "SELECT COUNT(*) AS count FROM scans WHERE user_id = ? AND user_hidden_at IS NULL", (user_id,)
         ).fetchone()["count"]
         alert_count = db.execute(
-            "SELECT COUNT(*) AS count FROM scans WHERE user_id = ? AND lower(risk) IN ('high', 'critical')",
+            "SELECT COUNT(*) AS count FROM scans WHERE user_id = ? AND user_hidden_at IS NULL "
+            "AND lower(risk) IN ('high', 'critical')",
             (user_id,),
         ).fetchone()["count"]
         recent_scans = db.execute(
-            "SELECT module, target, risk, created_at FROM scans WHERE user_id = ? ORDER BY id DESC LIMIT 5",
+            "SELECT module, target, risk, created_at FROM scans "
+            "WHERE user_id = ? AND user_hidden_at IS NULL ORDER BY id DESC LIMIT 5",
             (user_id,),
         ).fetchall()
         return render_template(
@@ -324,13 +326,14 @@ def create_app():
         user = get_current_user()
         if user["role"] == "admin":
             scans = get_db().execute(
-                "SELECT scans.module, scans.target, scans.risk, scans.summary, scans.created_at, users.email "
+                "SELECT scans.module, scans.target, scans.risk, scans.summary, scans.created_at, users.email, "
+                "scans.user_hidden_at "
                 "FROM scans JOIN users ON users.id = scans.user_id ORDER BY scans.id DESC"
             ).fetchall()
         else:
             scans = get_db().execute(
                 "SELECT module, target, risk, summary, created_at "
-                "FROM scans WHERE user_id = ? ORDER BY id DESC",
+                "FROM scans WHERE user_id = ? AND user_hidden_at IS NULL ORDER BY id DESC",
                 (user["id"],),
             ).fetchall()
         review_items = [scan for scan in scans if scan["risk"].lower() in {"review", "high", "critical"}]
@@ -352,10 +355,14 @@ def create_app():
             abort(403)
 
         db = get_db()
-        cursor = db.execute("DELETE FROM scans WHERE user_id = ?", (user["id"],))
+        cursor = db.execute(
+            "UPDATE scans SET user_hidden_at = CURRENT_TIMESTAMP "
+            "WHERE user_id = ? AND user_hidden_at IS NULL",
+            (user["id"],),
+        )
         db.commit()
         count = cursor.rowcount
-        flash(f"Cleared {count} scan record(s) from your history.", "success")
+        flash(f"Hid {count} scan record(s) from your account history. Admins can still view them.", "success")
         return redirect(url_for("alerts_history"))
 
     @app.post("/admin/history/clear-users")
@@ -394,13 +401,14 @@ def create_app():
         user = get_current_user()
         if user["role"] == "admin":
             scans = get_db().execute(
-                "SELECT scans.module, scans.target, scans.risk, scans.summary, scans.created_at, users.email "
+                "SELECT scans.module, scans.target, scans.risk, scans.summary, scans.created_at, users.email, "
+                "scans.user_hidden_at "
                 "FROM scans JOIN users ON users.id = scans.user_id ORDER BY scans.id DESC"
             ).fetchall()
         else:
             scans = get_db().execute(
                 "SELECT module, target, risk, summary, created_at "
-                "FROM scans WHERE user_id = ? ORDER BY id DESC",
+                "FROM scans WHERE user_id = ? AND user_hidden_at IS NULL ORDER BY id DESC",
                 (user["id"],),
             ).fetchall()
         module_counts = {}
@@ -425,13 +433,14 @@ def create_app():
         is_admin = user["role"] == "admin"
         if is_admin:
             scans = get_db().execute(
-                "SELECT scans.module, scans.target, scans.risk, scans.summary, scans.created_at, users.email "
+                "SELECT scans.module, scans.target, scans.risk, scans.summary, scans.created_at, users.email, "
+                "scans.user_hidden_at "
                 "FROM scans JOIN users ON users.id = scans.user_id ORDER BY scans.id DESC"
             ).fetchall()
         else:
             scans = get_db().execute(
                 "SELECT module, target, risk, summary, created_at "
-                "FROM scans WHERE user_id = ? ORDER BY id DESC",
+                "FROM scans WHERE user_id = ? AND user_hidden_at IS NULL ORDER BY id DESC",
                 (user["id"],),
             ).fetchall()
 

@@ -79,3 +79,7 @@ def init_db(app):
             );
             """
         )
+        scan_columns = {row["name"] for row in get_db().execute("PRAGMA table_info(scans)").fetchall()}
+        if "user_hidden_at" not in scan_columns:
+            get_db().execute("ALTER TABLE scans ADD COLUMN user_hidden_at TEXT")
+            get_db().commit()
