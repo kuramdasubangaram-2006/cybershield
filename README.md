@@ -5,6 +5,7 @@ CyberShield is a Flask web app for basic security checks, account management, an
 ## Features
 
 - Admin and User accounts. Admins can review all accounts and scans; users can view only their own scans.
+- Users can clear their own scan history, and User scans expire after 24 hours. Admin scans do not expire automatically; the Admin clear action affects only Admin account scans.
 - Users can change their password; Admins can set a temporary password for User accounts.
 - IP address format and address-range checks.
 - URL structure checks that do not open or contact the submitted site.

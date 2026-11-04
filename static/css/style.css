@@ -278,6 +278,9 @@ body.login-page {
 .password-change-panel { max-width: 680px; }
 .password-change-form { display: grid; gap: 15px; max-width: 520px; }
 .password-change-button { min-height: 47px; justify-self: start; padding: 0 16px; }
+.clear-history-button { padding: 7px 11px; border: 1px solid rgba(255, 126, 126, 0.28); border-radius: 7px; background: rgba(165, 49, 58, 0.08); color: #ffb2b2; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+.clear-history-button:hover { border-color: rgba(255, 126, 126, 0.55); background: rgba(165, 49, 58, 0.16); }
+.history-retention-note { margin: -5px 0 14px; }
 .error-card { width: min(460px, calc(100% - 40px)); margin: 12vh auto; padding: 36px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
 .error-card h1 { margin: 10px 0; font-size: 3rem; }
 .error-card > p:not(.eyebrow) { margin-bottom: 24px; color: var(--muted); }

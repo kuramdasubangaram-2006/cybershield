@@ -52,6 +52,18 @@ def create_app():
     init_db(app)
     app.jinja_env.filters["ist_datetime"] = ist_datetime
 
+    @app.before_request
+    def expire_local_user_scans():
+        if app.config.get("DATABASE_URL") or request.endpoint in {"health", "static"}:
+            return
+        db = get_db()
+        db.execute(
+            "DELETE FROM scans WHERE user_id IN "
+            "(SELECT id FROM users WHERE role = 'user') "
+            "AND datetime(created_at) < datetime('now', '-24 hours')"
+        )
+        db.commit()
+
     @app.context_processor
     def add_template_helpers():
         return {"csrf_token": csrf_token, "current_user": get_current_user()}
@@ -329,6 +341,35 @@ def create_app():
             review_items=review_items,
             admin_view=user["role"] == "admin",
         )
+
+    @app.post("/history/clear")
+    @login_required
+    def clear_user_history():
+        if not validate_csrf():
+            abort(400)
+        user = get_current_user()
+        if user["role"] != "user":
+            abort(403)
+
+        db = get_db()
+        cursor = db.execute("DELETE FROM scans WHERE user_id = ?", (user["id"],))
+        db.commit()
+        count = cursor.rowcount
+        flash(f"Cleared {count} scan record(s) from your history.", "success")
+        return redirect(url_for("alerts_history"))
+
+    @app.post("/admin/history/clear")
+    @admin_required
+    def clear_admin_history():
+        if not validate_csrf():
+            abort(400)
+        user = get_current_user()
+        db = get_db()
+        cursor = db.execute("DELETE FROM scans WHERE user_id = ?", (user["id"],))
+        db.commit()
+        count = cursor.rowcount
+        flash(f"Cleared {count} scan record(s) from the Admin account. User scans were not deleted.", "success")
+        return redirect(url_for("alerts_history"))
 
     @app.get("/reports")
     @login_required
