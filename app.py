@@ -358,17 +358,34 @@ def create_app():
         flash(f"Cleared {count} scan record(s) from your history.", "success")
         return redirect(url_for("alerts_history"))
 
-    @app.post("/admin/history/clear")
+    @app.post("/admin/history/clear-users")
     @admin_required
-    def clear_admin_history():
+    def clear_user_scans():
         if not validate_csrf():
             abort(400)
-        user = get_current_user()
         db = get_db()
-        cursor = db.execute("DELETE FROM scans WHERE user_id = ?", (user["id"],))
+        cursor = db.execute(
+            "DELETE FROM scans WHERE user_id IN "
+            "(SELECT id FROM users WHERE role = 'user')"
+        )
         db.commit()
         count = cursor.rowcount
-        flash(f"Cleared {count} scan record(s) from the Admin account. User scans were not deleted.", "success")
+        flash(f"Cleared {count} scan record(s) from all User accounts.", "success")
+        return redirect(url_for("alerts_history"))
+
+    @app.post("/admin/history/clear-admins")
+    @admin_required
+    def clear_admin_scans():
+        if not validate_csrf():
+            abort(400)
+        db = get_db()
+        cursor = db.execute(
+            "DELETE FROM scans WHERE user_id IN "
+            "(SELECT id FROM users WHERE role = 'admin')"
+        )
+        db.commit()
+        count = cursor.rowcount
+        flash(f"Cleared {count} scan record(s) from Admin accounts.", "success")
         return redirect(url_for("alerts_history"))
 
     @app.get("/reports")

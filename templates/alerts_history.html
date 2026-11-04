@@ -25,16 +25,22 @@
           <button class="clear-history-button" type="submit">Clear my history</button>
         </form>
       {% else %}
-        <form method="post" action="{{ url_for('clear_admin_history') }}" onsubmit="return confirm('Clear only scans created by your Admin account? User scans will remain. This cannot be undone.');">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="clear-history-button" type="submit">Clear my Admin scans</button>
-        </form>
+        <div class="history-clear-actions">
+          <form method="post" action="{{ url_for('clear_user_scans') }}" onsubmit="return confirm('Delete scan history for every User account? Users will lose these records too. This cannot be undone.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="clear-history-button" type="submit">Clear User scans</button>
+          </form>
+          <form method="post" action="{{ url_for('clear_admin_scans') }}" onsubmit="return confirm('Delete scan history for Admin accounts? This cannot be undone.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="clear-history-button" type="submit">Clear Admin scans</button>
+          </form>
+        </div>
       {% endif %}
     </div>
     {% if not admin_view %}
       <p class="role-note left-note history-retention-note">Your scans are automatically deleted after 24 hours (cleanup runs every 5 minutes). Clearing them here also removes them from the Admin history.</p>
     {% else %}
-      <p class="role-note left-note history-retention-note">User scans auto-delete after 24 hours. Admin scans stay until you clear them; this button deletes only your Admin account scans.</p>
+      <p class="role-note left-note history-retention-note">User scans auto-delete after 24 hours. Use the separate controls above to manually clear User or Admin scan history.</p>
     {% endif %}
     {% if scans %}
       <div class="table-responsive"><table class="data-table"><thead><tr>{% if admin_view %}<th>User</th>{% endif %}<th>Module</th><th>Target</th><th>Risk</th><th>Time (IST)</th></tr></thead><tbody>
