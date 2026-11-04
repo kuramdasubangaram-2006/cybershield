@@ -7,10 +7,12 @@
   </section>
 
   <section class="metric-grid" aria-label="Workspace statistics">
-    <article class="metric-card"><span class="metric-icon cyan">♙</span><p>Users</p><strong>{{ user_count }}</strong><small>Registered user accounts</small></article>
-    <article class="metric-card"><span class="metric-icon blue">⌕</span><p>Scans</p><strong>{{ scan_count }}</strong><small>Across the workspace</small></article>
-    <article class="metric-card"><span class="metric-icon amber">◉</span><p>High-risk findings</p><strong>{{ alert_count }}</strong><small>High or critical results</small></article>
+    <article class="metric-card metric-users"><span class="metric-icon cyan">♙</span><p>Users</p><strong>{{ user_count }}</strong><small>Registered user accounts</small></article>
+    <article class="metric-card metric-scans"><span class="metric-icon blue">⌕</span><p>Scans</p><strong>{{ scan_count }}</strong><small>Across the workspace</small></article>
+    <article class="metric-card metric-alerts"><span class="metric-icon amber">◉</span><p>High-risk findings</p><strong>{{ alert_count }}</strong><small>High or critical results</small></article>
   </section>
+
+  {% include "dashboard_analytics.html" %}
 
   <section class="content-panel">
     <div class="panel-heading"><div><h3>Recent workspace activity</h3><p>Scan records from all user accounts</p></div><span class="panel-tag">ADMIN VIEW</span></div>
@@ -24,12 +26,12 @@
   </section>
 
   <section class="content-panel next-panel">
-    <div class="panel-heading"><div><h3>Analysis modules</h3><p>We will activate these one by one this week.</p></div></div>
+      <div class="panel-heading"><div><h3>Available analysis tools</h3><p>Open any tool from the workspace navigation.</p></div></div>
     <div class="module-preview-grid">
-      <div class="module-preview"><span>01</span><strong>IP Detection</strong><small>IP reputation and indicators</small></div>
-      <div class="module-preview"><span>02</span><strong>URL Scanner</strong><small>URL structure and threat checks</small></div>
-      <div class="module-preview"><span>03</span><strong>File Analyzer</strong><small>Safe file hash analysis</small></div>
-      <div class="module-preview"><span>04</span><strong>Log Analysis</strong><small>Repeated and suspicious activity</small></div>
+      <div class="module-preview"><span>01</span><strong>IP Detection</strong><small>Address format and range checks</small></div>
+      <div class="module-preview"><span>02</span><strong>URL Scanner</strong><small>URL structure and limited page details</small></div>
+      <div class="module-preview"><span>03</span><strong>File Analyzer</strong><small>File metadata and static pattern checks</small></div>
+      <div class="module-preview"><span>04</span><strong>Log Analysis</strong><small>Common events and login patterns</small></div>
     </div>
   </section>
 {% endblock %}

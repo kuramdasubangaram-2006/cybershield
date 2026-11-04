@@ -1,7 +1,7 @@
 {% extends "dashboard_base.html" %}
 {% block content %}
   <section class="welcome-row">
-    <div><p class="eyebrow">ANALYSIS TOOL</p><h2>File Analyzer</h2><p>Review basic file details and a few known file signatures.</p></div>
+    <div><p class="eyebrow">ANALYSIS TOOL</p><h2>File Analyzer</h2><p>Review file details, known signatures, printable strings, and a few common risky command or API combinations.</p></div>
     <span class="panel-tag">LOCAL CHECKS ONLY</span>
   </section>
 
@@ -37,5 +37,5 @@
     </section>
   {% endif %}
 
-  <section class="scanner-disclaimer"><strong>Important:</strong> This is not an antivirus scan. “Normal” means no warning was found in these basic checks; it does not prove the file is safe. Do not open or run files you do not trust.</section>
+  <section class="scanner-disclaimer"><strong>Important:</strong> Static pattern matches can be false positives. Obfuscated, packed, encrypted, or unknown payloads may not match these checks. This is not an antivirus scan. “Normal” does not prove the file is safe. Do not open or run files you do not trust.</section>
 {% endblock %}

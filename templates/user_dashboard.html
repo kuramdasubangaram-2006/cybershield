@@ -7,10 +7,12 @@
   </section>
 
   <section class="metric-grid" aria-label="Your statistics">
-    <article class="metric-card"><span class="metric-icon cyan">⌕</span><p>My scans</p><strong>{{ scan_count }}</strong><small>Scans created by your account</small></article>
-    <article class="metric-card"><span class="metric-icon amber">◉</span><p>My high-risk findings</p><strong>{{ alert_count }}</strong><small>High or critical results</small></article>
-    <article class="metric-card privacy-card"><span class="metric-icon green">✓</span><p>Account privacy</p><strong>On</strong><small>Only your activity is shown here</small></article>
+    <article class="metric-card metric-scans"><span class="metric-icon cyan">⌕</span><p>My scans</p><strong>{{ scan_count }}</strong><small>Scans created by your account</small></article>
+    <article class="metric-card metric-alerts"><span class="metric-icon amber">◉</span><p>My high-risk findings</p><strong>{{ alert_count }}</strong><small>High or critical results</small></article>
+    <article class="metric-card metric-privacy privacy-card"><span class="metric-icon green">✓</span><p>Account privacy</p><strong>On</strong><small>Only your activity is shown here</small></article>
   </section>
+
+  {% include "dashboard_analytics.html" %}
 
   <section class="content-panel">
     <div class="panel-heading"><div><h3>My recent activity</h3><p>Only records owned by your account are listed.</p></div></div>

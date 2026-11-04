@@ -21,19 +21,18 @@
           <span>CYBER<span class="brand-accent">SHIELD</span></span>
         </a>
 
-        <div class="brand-copy">
-          <p class="eyebrow">SECURITY OPERATIONS WORKSPACE</p>
-          <h1>See the signal.<br><span>Stay in control.</span></h1>
-          <p class="brand-description">A clear workspace for reviewing security activity and investigating potential threats.</p>
-
-          <div class="feature-list" aria-label="CyberShield features">
-            <div class="feature-item"><span class="feature-dot"></span>Threat analysis tools</div>
-            <div class="feature-item"><span class="feature-dot"></span>Security alerts and history</div>
-            <div class="feature-item"><span class="feature-dot"></span>Account-based access</div>
-          </div>
+        <div class="brand-orbit" aria-hidden="true">
+          <span class="orbit-ring orbit-ring-outer"></span>
+          <span class="orbit-ring orbit-ring-inner"></span>
+          <span class="orbit-core"><svg viewBox="0 0 40 40" fill="none"><path d="M20 3.5 34 9v10.2c0 8.2-5.5 14.1-14 17.3-8.5-3.2-14-9.1-14-17.3V9l14-5.5Z" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 18v-2a4.5 4.5 0 0 1 9 0v2m-10 0h11v8h-11z" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="orbit-spark orbit-spark-one"></span><span class="orbit-spark orbit-spark-two"></span><span class="orbit-spark orbit-spark-three"></span>
         </div>
 
-        <p class="brand-footnote">Your account access level will be assigned securely.</p>
+        <div class="brand-copy">
+          <p class="eyebrow">SECURITY OPERATIONS</p>
+          <h1>CyberShield<br><span>SIEM Platform</span></h1>
+          <p class="brand-description">Monitor <span>·</span> Detect <span>·</span> Respond</p>
+        </div>
       </section>
 
       <section class="form-panel" aria-labelledby="login-heading">
@@ -51,7 +50,7 @@
           <div class="form-heading">
             <span class="secure-label"><span class="secure-dot"></span> SECURE SIGN IN</span>
             <h2 id="login-heading">Welcome back</h2>
-            <p>Sign in to continue to your CyberShield workspace.</p>
+            <p>Sign in to your security workspace.</p>
           </div>
 
           {% with messages = get_flashed_messages(with_categories=true) %}
@@ -86,11 +85,12 @@
             <button class="btn sign-in-button w-100" type="submit">Sign in <span aria-hidden="true">→</span></button>
           </form>
 
-          <div class="login-divider"><span></span><small>CYBERSHIELD ACCESS</small><span></span></div>
-          <p class="account-note">Need an account? Ask your CyberShield administrator.</p>
-          <p class="role-note">Admins manage the workspace. Users see only their own activity.</p>
+          <div class="developer-credit" aria-label="Project credits">
+            <span>Developed by <a class="developer-name" href="https://www.linkedin.com/in/bangaram-kuramdasu" target="_blank" rel="noopener noreferrer">Bangarraju</a></span>
+            <span>Under the guidance of <a class="mentor-name" href="https://www.linkedin.com/in/shanthan-5386a5112/" target="_blank" rel="noopener noreferrer">Shanthan</a></span>
+          </div>
         </div>
-        <footer class="form-footer">CyberShield <span>•</span> Threat Detection &amp; Security Analysis</footer>
+        <footer class="form-footer">CyberShield</footer>
       </section>
     </main>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>

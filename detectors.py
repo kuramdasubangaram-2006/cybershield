@@ -3,6 +3,7 @@
 import hashlib
 import ipaddress
 import re
+from datetime import datetime, timezone
 from pathlib import PurePath
 from urllib.parse import urlsplit
 
@@ -212,6 +213,25 @@ def analyze_file(filename, content):
         indicators.append("Archive contents were not opened or inspected.")
     if detected_type == "OLE compound document":
         indicators.append("This legacy document container can hold different content; its internal contents were not inspected.")
+
+    # Scan printable strings in both ASCII and UTF-16LE without executing the
+    # upload. These heuristics are not a malware signature scan.
+    ascii_strings = b" ".join(re.findall(rb"[\x20-\x7e]{4,}", content)).decode("ascii").lower()
+    wide_strings = b" ".join(re.findall(rb"(?:[\x20-\x7e]\x00){4,}", content))
+    utf16_strings = wide_strings.decode("utf-16le", errors="ignore").lower()
+    content_text = f"{ascii_strings} {utf16_strings}"
+    payload_patterns = (
+        ("PowerShell download-and-execute chain", re.compile(r"(?:downloadstring|invoke-webrequest|start-bitstransfer)[\s\S]{0,240}(?:invoke-expression|\biex\b)|(?:invoke-expression|\biex\b)[\s\S]{0,240}(?:downloadstring|invoke-webrequest|start-bitstransfer)")),
+        ("Shell reverse-connection pattern", re.compile(r"/dev/tcp/|bash\s+-i\s+>&\s*/dev/tcp|nc\s+-e\s+/bin/(?:sh|bash)")),
+        ("Python socket-and-command pattern", re.compile(r"socket\.socket[\s\S]{0,500}(?:subprocess|os\.dup2)|(?:subprocess|os\.dup2)[\s\S]{0,500}socket\.socket")),
+        ("JavaScript encoded-evaluation pattern", re.compile(r"(?:eval\s*\(\s*atob\s*\(|new\s+function\s*\(\s*atob\s*\()")),
+        ("Windows download-and-execution API combination", re.compile(r"(?=.*(?:urldownloadtofile|internetopenurl|winhttpopenrequest))(?=.*(?:createprocess|shellexecute|winexec))")),
+        ("Windows process-injection API combination", re.compile(r"(?=.*(?:virtualallocex|virtualalloc|virtualprotect))(?=.*(?:writeprocessmemory|createremotethread|queueuserapc))")),
+    )
+    matched_payload_patterns = [label for label, pattern in payload_patterns if pattern.search(content_text)]
+    for label in matched_payload_patterns:
+        indicators.append(f"Static content check matched a {label}; this can indicate harmful behavior but may also occur in security tests or documentation.")
+
     if not indicators:
         indicators.append("Only the file name, size, SHA-256 hash, and a short file signature were checked.")
 
@@ -220,26 +240,30 @@ def analyze_file(filename, content):
         expected_type and expected_type != detected_type
         and (expected_type in executable_types or detected_type in executable_types)
     )
-    risk = "High" if strong_caution else "Low" if caution else "Normal"
+    risk = "High" if strong_caution or matched_payload_patterns else "Low" if caution else "Normal"
     recommendations = (
         ["Do not run this file. Verify where it came from and check it with trusted endpoint-security software."]
-        if caution else
+        if caution or matched_payload_patterns else
         ["No warning was found in the limited checks. Use trusted endpoint-security software before opening an unknown file."]
     )
-    if strong_caution:
+    if matched_payload_patterns:
+        explanation = "Static content checks found one or more command or script patterns commonly associated with payload behavior. These pattern matches are heuristic and can be false positives; the file was not executed, and no antivirus or reputation scan was performed."
+    elif detected_type in executable_types:
+        explanation = "The file is a Windows or Linux executable. Limited printable-string checks did not match the configured payload patterns. Obfuscated, packed, encrypted, or otherwise unrecognized behavior may not appear in these strings; no code was executed and no antivirus scan was performed."
+    elif strong_caution:
         explanation = "The file has a stronger name or signature mismatch warning. Multiple extensions or a mismatch involving executable content can disguise what a file may do. This is a warning sign, not proof that the file is malware."
     elif caution:
         explanation = "The file name or short signature indicates executable or script content. Many legitimate programs use these formats, but opening an untrusted program can run its code. No antivirus scan was performed."
     else:
         explanation = "The short signature check did not find a configured executable or extension mismatch warning. CyberShield did not inspect all file contents or run antivirus checks; archives and document internals may not have been examined."
     return {
-        "label": "File needs review" if caution else "Basic file checks — no warning found",
+        "label": "Potential payload pattern found" if matched_payload_patterns else "File needs review" if caution else "Basic file checks — no warning found",
         "risk": risk,
-        "summary": "Basic metadata and file-signature checks only. No antivirus scan was performed, so this file is not confirmed safe.",
+        "summary": "Basic metadata, file signature, printable strings, and limited command or API-pattern combinations were checked. No antivirus scan was performed, so this file is not confirmed safe.",
         "indicators": indicators,
         "explanation": explanation,
         "recommendations": recommendations,
-        "facts": {"Detected type": detected_type, "File size": f"{size} bytes", "Extension": suffix or "None"},
+        "facts": {"Detected type": detected_type, "File size": f"{size} bytes", "Extension": suffix or "None", "Static pattern groups matched": str(len(matched_payload_patterns))},
         "target": name,
         "file_type": detected_type,
         "size": size,
@@ -266,7 +290,7 @@ def analyze_logs(value):
             re.IGNORECASE,
         ),
         "successful_logins": re.compile(
-            r"accepted password|accepted publickey|login successful|user authenticated|session opened for user",
+            r"accepted password|accepted publickey|login successful|user authenticated|session opened for user|\blogged in\b|\bsuccessful login\b|\blogin succeeded\b",
             re.IGNORECASE,
         ),
         "privileged_events": re.compile(r"\bsudo\b|privilege escalation|\brunas\b", re.IGNORECASE),
@@ -276,12 +300,78 @@ def analyze_logs(value):
         ),
     }
     counts = {name: sum(bool(pattern.search(line)) for line in lines) for name, pattern in patterns.items()}
+    failure_pattern = patterns["authentication_failures"]
+    success_pattern = patterns["successful_logins"]
+    source_pattern = re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])")
+    timestamp_pattern = re.compile(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?")
+    failure_sources = {}
+    success_sources = {}
+    timestamped_lines = 0
+    for line_number, line in enumerate(lines, start=1):
+        addresses = set()
+        for candidate in source_pattern.findall(line):
+            try:
+                addresses.add(str(ipaddress.ip_address(candidate)))
+            except ValueError:
+                continue
+        source = next(iter(addresses)) if len(addresses) == 1 else None
+        timestamp_match = timestamp_pattern.search(line)
+        timestamp = None
+        if timestamp_match:
+            try:
+                timestamp = datetime.fromisoformat(timestamp_match.group(0).replace("Z", "+00:00"))
+                if timestamp.tzinfo is not None:
+                    timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+                timestamped_lines += 1
+            except ValueError:
+                timestamp = None
+        event = (line_number, timestamp)
+        if source and failure_pattern.search(line):
+            failure_sources.setdefault(source, []).append(event)
+        if source and success_pattern.search(line):
+            success_sources.setdefault(source, []).append(event)
+
+    repeated_failure_sources = {source: events for source, events in failure_sources.items() if len(events) >= 2}
+    rapid_failure_sources = set()
+    burst_failure_sources = set()
+    for source, events in failure_sources.items():
+        timed = sorted((ts, line_number) for line_number, ts in events if ts is not None)
+        for start_index, (start_time, _) in enumerate(timed):
+            end_index = start_index + 1
+            while end_index < len(timed):
+                end_time = timed[end_index][0]
+                if (end_time - start_time).total_seconds() > 300:
+                    break
+                end_index += 1
+            window_count = end_index - start_index
+            if window_count >= 2:
+                rapid_failure_sources.add(source)
+            if window_count >= 5:
+                burst_failure_sources.add(source)
+                break
+
+    failures_then_success = set()
+    for source in set(failure_sources) & set(success_sources):
+        failures = failure_sources[source]
+        successes = success_sources[source]
+        if any(success_line > failure_line for success_line, _ in successes for failure_line, _ in failures):
+            failures_then_success.add(source)
+
     indicators = []
     failed = counts["authentication_failures"]
     if failed:
         indicators.append(f"Found {failed} log line(s) matching common authentication-failure wording.")
         if failed >= 10:
             indicators.append("The number of matching failures is high enough to review against expected activity.")
+    if repeated_failure_sources:
+        repeated_attempts = sum(len(events) for events in repeated_failure_sources.values())
+        indicators.append(f"Repeated authentication failures came from {len(repeated_failure_sources)} source address(es), accounting for {repeated_attempts} failed line(s). Source values are omitted from the saved report.")
+    if rapid_failure_sources:
+        indicators.append(f"At least 2 authentication failures from the same source occurred within 5 minutes for {len(rapid_failure_sources)} source address(es); the report records source counts only.")
+    if burst_failure_sources:
+        indicators.append(f"At least 5 authentication failures from the same source occurred within a 5-minute window for {len(burst_failure_sources)} source address(es). This pattern needs prompt review.")
+    if failures_then_success:
+        indicators.append(f"A successful login followed failed attempts from the same source address for {len(failures_then_success)} source address(es). Confirm the account owner and session activity.")
     if counts["successful_logins"]:
         indicators.append(f"Found {counts['successful_logins']} line(s) matching common successful-login wording.")
     if counts["privileged_events"]:
@@ -293,12 +383,18 @@ def analyze_logs(value):
     if not indicators:
         indicators.append("No configured keyword patterns matched; this does not prove the log is clean.")
     any_match = any(counts.values())
-    if failed >= 10:
-        recommendations = ["Review the source addresses and times, confirm whether the attempts were expected, and secure affected accounts if they were not."]
-        explanation = "Many lines matched common authentication-failure phrases. This can be consistent with repeated guessing, but it could also be expected activity or duplicated logging. Check timing, source addresses, and account context."
+    high_risk = failed >= 10 or bool(burst_failure_sources) or bool(failures_then_success)
+    if high_risk:
+        recommendations = ["Review the correlated source and timestamps, verify whether the successful session was legitimate, and follow your organization's incident process if it was unexpected."]
+        explanation = "The log contains a stronger authentication pattern: a high number of failures, a short burst from one source, or a successful login after failures from that source. This is suspicious activity to investigate, not proof of compromise."
     elif needs_review:
         recommendations = ["Review the matching log entries in context and confirm that the account or privileged activity was expected."]
-        explanation = "One or more lines matched common failure, privileged-command, or account-change phrases. The analyzer searches words only; it does not validate the event source or determine whether the action was authorized."
+        if failed and rapid_failure_sources:
+            explanation = f"The sample has {failed} authentication-failure line(s), including at least 2 from the same source within 5 minutes. No same-source successful login, five-failure burst, privileged command, or account change was identified. This warrants review, but the small sample does not meet the stronger alert threshold."
+        elif failed and repeated_failure_sources:
+            explanation = f"The sample has {failed} authentication-failure line(s), including repeated attempts from the same source. No same-source successful login, five-failure burst, privileged command, or account change was identified. This warrants review, but the small sample does not meet the stronger alert threshold."
+        else:
+            explanation = "One or more lines matched common failure, privileged-command, or account-change phrases. The analyzer searches words and correlates visible timestamps and source addresses; it cannot validate the event source or determine whether the action was authorized."
     else:
         recommendations = ["No configured warning keywords matched. Compare with other system logs; this does not prove the system is safe."]
         explanation = "No configured high-priority phrases matched. If successful-login phrases were found, they are shown as counts; absence of warning phrases does not prove the system is free of suspicious activity."
@@ -308,8 +404,8 @@ def analyze_logs(value):
             else "Log patterns found — no high-priority indicator" if any_match
             else "No matching patterns — no warning found"
         ),
-        "risk": "High" if failed >= 10 else "Low" if needs_review else "Normal",
-        "summary": f"Basic keyword checks reviewed {len(lines)} non-empty log line(s). This is not a complete security analysis.",
+        "risk": "High" if high_risk else "Low" if needs_review else "Normal",
+        "summary": f"Reviewed {len(lines)} non-empty log line(s): {failed} authentication failure(s), {counts['successful_logins']} successful login phrase(s), {counts['privileged_events']} privileged-command phrase(s), and {counts['account_changes']} account-change phrase(s). This is a local pattern review, not a complete security analysis.",
         "indicators": indicators,
         "explanation": explanation,
         "recommendations": recommendations,
@@ -319,8 +415,13 @@ def analyze_logs(value):
             "Successful login phrases": str(counts["successful_logins"]),
             "Privileged command phrases": str(counts["privileged_events"]),
             "Account change phrases": str(counts["account_changes"]),
+            "Distinct failure sources": str(len(failure_sources)),
+            "Repeated failure sources": str(len(repeated_failure_sources)),
+            "Sources with 2+ failures within 5 minutes": str(len(rapid_failure_sources)),
+            "Failure sources followed by success": str(len(failures_then_success)),
+            "Timestamped lines": str(timestamped_lines),
         },
         "target": f"Pasted log sample ({len(lines)} lines)",
         "line_count": len(lines),
-        "counts": counts,
+        "counts": {**counts, "distinct_failure_sources": len(failure_sources), "repeated_failure_sources": len(repeated_failure_sources), "rapid_failure_sources": len(rapid_failure_sources), "failures_then_success": len(failures_then_success), "timestamped_lines": timestamped_lines},
     }

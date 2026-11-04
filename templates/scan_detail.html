@@ -26,8 +26,8 @@
       {% if scan.module == 'IP Detection' %}Address format and network range were checked locally; the IP was not contacted and no reputation lookup was made.
       {% elif scan.module == 'URL Scanner' and details.site_explanation %}A limited read-only request gathered public page metadata; JavaScript was not run, forms were not submitted, and linked files were not fetched.
       {% elif scan.module == 'URL Scanner' %}URL structure was checked locally; this older scan did not gather live website details.
-      {% elif scan.module == 'File Analyzer' %}A short file signature and metadata were checked in memory; the file was not saved, executed, or antivirus-scanned.
-      {% elif scan.module == 'Log Analysis' %}Common keyword patterns were counted; the original pasted log text was not saved.
+      {% elif scan.module == 'File Analyzer' %}File metadata, a short signature, printable strings, and a few command or API-pattern combinations were checked in memory; the file was not saved, executed, or antivirus-scanned.
+      {% elif scan.module == 'Log Analysis' %}Common event phrases, source totals, repeated authentication failures, and visible timestamps were summarized; the original pasted log text and individual source values were not saved.
       {% endif %}
     </p>
     <div class="scan-detail-facts">

@@ -1,7 +1,7 @@
 {% extends "dashboard_base.html" %}
 {% block content %}
   <section class="welcome-row">
-    <div><p class="eyebrow">ANALYSIS TOOL</p><h2>Log Analysis</h2><p>Look for a few common authentication and account activity phrases.</p></div>
+    <div><p class="eyebrow">ANALYSIS TOOL</p><h2>Log Analysis</h2><p>Count common security events and correlate repeated authentication activity by source and time.</p></div>
     <span class="panel-tag">LOCAL KEYWORD CHECKS</span>
   </section>
 
@@ -30,11 +30,16 @@
         <div><span>Successful login phrases</span><strong>{{ result.counts.successful_logins }}</strong></div>
         <div><span>Privileged command phrases</span><strong>{{ result.counts.privileged_events }}</strong></div>
         <div><span>Account change phrases</span><strong>{{ result.counts.account_changes }}</strong></div>
+        <div><span>Distinct failure sources</span><strong>{{ result.counts.distinct_failure_sources }}</strong></div>
+        <div><span>Repeated failure sources</span><strong>{{ result.counts.repeated_failure_sources }}</strong></div>
+        <div><span>Sources with 2+ failures in 5 minutes</span><strong>{{ result.counts.rapid_failure_sources }}</strong></div>
+        <div><span>Failure sources followed by success</span><strong>{{ result.counts.failures_then_success }}</strong></div>
+        <div><span>Timestamped lines</span><strong>{{ result.counts.timestamped_lines }}</strong></div>
       </div>
       <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
       <div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>
     </section>
   {% endif %}
 
-  <section class="scanner-disclaimer"><strong>Important:</strong> These simple keyword checks can miss events or flag normal activity. “No matching patterns” does not mean a system is safe; review findings in context.</section>
+  <section class="scanner-disclaimer"><strong>Important:</strong> These local phrase, source, and timestamp checks can miss events or flag normal activity. They do not validate identities, establish compromise, or replace SIEM/endpoint monitoring. “No matching patterns” does not mean a system is safe; review findings in context.</section>
 {% endblock %}

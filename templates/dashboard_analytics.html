@@ -1,0 +1,77 @@
+<section class="dashboard-chart-grid" aria-label="Scan analytics">
+  <article class="content-panel chart-panel activity-panel">
+    <div class="panel-heading chart-heading">
+      <div><p class="eyebrow">LAST 7 DAYS</p><h3>Security scan activity</h3><p>Scan volume and findings recorded by CyberShield</p></div>
+      <span class="panel-tag">{{ dashboard_data.activity|sum(attribute='total') }} SCANS</span>
+    </div>
+    {% if dashboard_data.activity|sum(attribute='total') > 0 %}
+      <div class="chart-legend" aria-label="Chart legend">
+        <span><i class="legend-dot legend-total"></i>All scans</span>
+        <span><i class="legend-dot legend-review"></i>Needs review</span>
+        <span><i class="legend-dot legend-high"></i>High / critical</span>
+      </div>
+      <div class="activity-chart-wrap">
+        <svg class="activity-chart" viewBox="0 0 {{ dashboard_data.chart_width }} {{ dashboard_data.chart_height }}" role="img" aria-label="Seven-day scan activity line chart. All scans, results needing review, and high or critical results are shown.">
+          <defs><linearGradient id="scan-chart-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#54b9ff"/><stop offset="100%" stop-color="#54b9ff" stop-opacity="0"/></linearGradient></defs>
+          <line class="chart-gridline" x1="{{ dashboard_data.chart_left }}" x2="{{ dashboard_data.chart_right }}" y1="{{ dashboard_data.chart_top }}" y2="{{ dashboard_data.chart_top }}" />
+          <line class="chart-gridline" x1="{{ dashboard_data.chart_left }}" x2="{{ dashboard_data.chart_right }}" y1="{{ (dashboard_data.chart_top + dashboard_data.chart_bottom) / 2 }}" y2="{{ (dashboard_data.chart_top + dashboard_data.chart_bottom) / 2 }}" />
+          <line class="chart-gridline" x1="{{ dashboard_data.chart_left }}" x2="{{ dashboard_data.chart_right }}" y1="{{ dashboard_data.chart_bottom }}" y2="{{ dashboard_data.chart_bottom }}" />
+          <text class="chart-axis-label" x="4" y="{{ dashboard_data.chart_top + 4 }}">{{ dashboard_data.activity_max }}</text>
+          <text class="chart-axis-label" x="4" y="{{ (dashboard_data.chart_top + dashboard_data.chart_bottom) / 2 + 4 }}">{{ (dashboard_data.activity_max / 2)|round|int }}</text>
+          <text class="chart-axis-label" x="23" y="{{ dashboard_data.chart_bottom + 4 }}">0</text>
+          <polygon class="chart-area" points="{{ dashboard_data.activity_series.total }} {{ dashboard_data.chart_right }},{{ dashboard_data.chart_bottom }} {{ dashboard_data.chart_left }},{{ dashboard_data.chart_bottom }}" />
+          <polyline class="chart-line chart-line-total" points="{{ dashboard_data.activity_series.total }}" />
+          <polyline class="chart-line chart-line-review" points="{{ dashboard_data.activity_series.review }}" />
+          <polyline class="chart-line chart-line-high" points="{{ dashboard_data.activity_series.high }}" />
+          {% for day in dashboard_data.activity %}
+            {% set x = day.x %}
+            {% set y_total = dashboard_data.chart_bottom - (day.total / dashboard_data.activity_max * (dashboard_data.chart_bottom - dashboard_data.chart_top)) %}
+            {% set y_review = dashboard_data.chart_bottom - (day.review / dashboard_data.activity_max * (dashboard_data.chart_bottom - dashboard_data.chart_top)) %}
+            {% set y_high = dashboard_data.chart_bottom - (day.high / dashboard_data.activity_max * (dashboard_data.chart_bottom - dashboard_data.chart_top)) %}
+            <circle class="chart-point chart-point-total" cx="{{ x }}" cy="{{ y_total }}" r="3"><title>{{ day.date }}: {{ day.total }} total scans</title></circle>
+            <circle class="chart-point chart-point-review" cx="{{ x }}" cy="{{ y_review }}" r="2.5"><title>{{ day.date }}: {{ day.review }} results needing review</title></circle>
+            <circle class="chart-point chart-point-high" cx="{{ x }}" cy="{{ y_high }}" r="2.5"><title>{{ day.date }}: {{ day.high }} high or critical results</title></circle>
+            <text class="chart-day-label" x="{{ x }}" y="{{ dashboard_data.chart_bottom + 21 }}" text-anchor="middle">{{ day.label }}</text>
+          {% endfor %}
+        </svg>
+      </div>
+    {% else %}
+      <div class="chart-empty"><span class="empty-icon">⌁</span><strong>No scan activity in the last 7 days</strong><p>New checks will appear here as they are run.</p></div>
+    {% endif %}
+  </article>
+
+  <article class="content-panel chart-panel risk-panel">
+    <div class="panel-heading chart-heading"><div><p class="eyebrow">ALL SCANS</p><h3>Risk distribution</h3><p>Saved scan results by assigned level</p></div></div>
+    {% if dashboard_data.risk_total > 0 %}
+      <div class="risk-chart-layout">
+        <div class="risk-donut" role="img" aria-label="Risk distribution across {{ dashboard_data.risk_total }} saved scans" style="--risk-gradient: {{ dashboard_data.risk_gradient }}">
+          <div class="risk-donut-center"><strong>{{ dashboard_data.risk_total }}</strong><span>scans</span></div>
+        </div>
+        <div class="risk-legend">
+          {% for item in dashboard_data.risk_data %}
+            <div class="risk-legend-row"><span><i class="risk-swatch risk-swatch-{{ item.label|lower }}"></i>{{ item.label }}</span><strong>{{ item.count }}</strong></div>
+          {% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <div class="chart-empty compact-empty"><strong>No saved scan results yet</strong><p>Risk distribution will appear after your first scan.</p></div>
+    {% endif %}
+  </article>
+
+  <article class="content-panel chart-panel module-panel">
+    <div class="panel-heading chart-heading"><div><p class="eyebrow">TOOL MIX</p><h3>Scans by analysis tool</h3><p>{{ dashboard_data.module_total }} saved scans in total</p></div></div>
+    {% if dashboard_data.module_total > 0 %}
+      <div class="module-chart-list">
+        {% for item in dashboard_data.module_data %}
+          <div class="module-chart-row">
+            <span>{{ item.label }}</span>
+            <div class="module-chart-track"><i class="module-chart-fill module-fill-{{ loop.index }}" style="width: {{ item.percent }}%"></i></div>
+            <strong>{{ item.count }}</strong>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="chart-empty compact-empty"><strong>No tool activity yet</strong><p>Usage appears as scans are saved.</p></div>
+    {% endif %}
+  </article>
+</section>

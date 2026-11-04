@@ -52,6 +52,119 @@ def risk_level(value):
     }.get(str(value).lower(), str(value).title())
 
 
+def dashboard_analytics(db, user_id=None):
+    """Build chart series from real visible scan records without retaining extra data."""
+    scope = " WHERE user_hidden_at IS NULL" if user_id is not None else ""
+    parameters = (user_id,) if user_id is not None else ()
+    if user_id is not None:
+        scope += " AND user_id = ?"
+    risk_rows = db.execute(
+        "SELECT lower(risk) AS risk, COUNT(*) AS count FROM scans" + scope + " GROUP BY lower(risk)",
+        parameters,
+    ).fetchall()
+    module_rows = db.execute(
+        "SELECT module, COUNT(*) AS count FROM scans" + scope + " GROUP BY module",
+        parameters,
+    ).fetchall()
+
+    risk_counts = {label: 0 for label in ("Normal", "Low", "High", "Critical")}
+    for row in risk_rows:
+        label = risk_level(row["risk"])
+        if label not in risk_counts:
+            label = "Low"
+        risk_counts[label] += row["count"]
+    risk_total = sum(risk_counts.values())
+    risk_colors = {"Normal": "#34d399", "Low": "#55b8ff", "High": "#ffb84d", "Critical": "#ff5878"}
+    risk_data = [
+        {"label": label, "count": count, "percent": round(count * 100 / risk_total, 1) if risk_total else 0, "color": risk_colors[label]}
+        for label, count in risk_counts.items()
+    ]
+    stops = []
+    degrees = 0.0
+    for item in risk_data:
+        if item["count"]:
+            next_degrees = degrees + item["count"] * 360 / risk_total
+            stops.append(f"{item['color']} {degrees:.2f}deg {next_degrees:.2f}deg")
+            degrees = next_degrees
+    risk_gradient = f"conic-gradient({', '.join(stops)})" if stops else ""
+
+    module_order = ("IP Detection", "URL Scanner", "File Analyzer", "Log Analysis")
+    module_counts = {name: 0 for name in module_order}
+    for row in module_rows:
+        name = row["module"]
+        module_counts[name] = module_counts.get(name, 0) + row["count"]
+    module_total = sum(module_counts.values())
+    module_data = [
+        {"label": name, "count": count, "percent": round(count * 100 / module_total, 1) if module_total else 0}
+        for name, count in module_counts.items()
+    ]
+
+    today = datetime.now(INDIA_TIMEZONE).date()
+    days = [today - timedelta(days=offset) for offset in range(6, -1, -1)]
+    first_day = datetime.combine(days[0], datetime.min.time(), tzinfo=INDIA_TIMEZONE)
+    cutoff = first_day.astimezone(timezone.utc)
+    if current_app.config.get("DATABASE_URL"):
+        cutoff_parameter = cutoff
+    else:
+        cutoff_parameter = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+    recent_scope = " WHERE created_at >= ?" + (" AND user_hidden_at IS NULL AND user_id = ?" if user_id is not None else "")
+    recent_parameters = (cutoff_parameter, user_id) if user_id is not None else (cutoff_parameter,)
+    recent_rows = db.execute(
+        "SELECT module, risk, created_at FROM scans" + recent_scope,
+        recent_parameters,
+    ).fetchall()
+
+    daily = {day: {"total": 0, "review": 0, "high": 0} for day in days}
+    for row in recent_rows:
+        try:
+            local_day = parse_utc_datetime(row["created_at"]).astimezone(INDIA_TIMEZONE).date()
+        except (TypeError, ValueError):
+            continue
+        if local_day not in daily:
+            continue
+        item = daily[local_day]
+        item["total"] += 1
+        label = risk_level(row["risk"])
+        if label in {"Low", "High", "Critical"}:
+            item["review"] += 1
+        if label in {"High", "Critical"}:
+            item["high"] += 1
+
+    max_count = max((values["total"] for values in daily.values()), default=0)
+    chart_width, chart_height = 700, 190
+    left, right, top, bottom = 40, 688, 14, 157
+    x_step = (right - left) / 6
+
+    def series_points(key):
+        points = []
+        for index, day in enumerate(days):
+            count = daily[day][key]
+            y = bottom - (count / max_count * (bottom - top) if max_count else 0)
+            points.append(f"{left + index * x_step:.1f},{y:.1f}")
+        return " ".join(points)
+
+    activity = [
+        {"label": day.strftime("%a"), "date": day.strftime("%b %d"), "total": daily[day]["total"], "review": daily[day]["review"], "high": daily[day]["high"], "x": round(left + index * x_step, 1)}
+        for index, day in enumerate(days)
+    ]
+    return {
+        "risk_data": risk_data,
+        "risk_total": risk_total,
+        "risk_gradient": risk_gradient,
+        "module_data": module_data,
+        "module_total": module_total,
+        "activity": activity,
+        "activity_series": {"total": series_points("total"), "review": series_points("review"), "high": series_points("high")},
+        "activity_max": max_count,
+        "chart_width": chart_width,
+        "chart_height": chart_height,
+        "chart_left": left,
+        "chart_right": right,
+        "chart_top": top,
+        "chart_bottom": bottom,
+    }
+
+
 def persisted_analysis_details(result):
     """Keep derived findings only; never persist uploaded bytes or pasted log text."""
     allowed = {
@@ -385,6 +498,7 @@ def create_app():
             scan_count=scan_count,
             alert_count=alert_count,
             recent_scans=recent_scans,
+            dashboard_data=dashboard_analytics(db, user_id=user_id),
         )
 
     @app.get("/admin")
@@ -407,6 +521,7 @@ def create_app():
             scan_count=scan_count,
             alert_count=alert_count,
             recent_scans=recent_scans,
+            dashboard_data=dashboard_analytics(db),
         )
 
     @app.get("/admin/activity")
