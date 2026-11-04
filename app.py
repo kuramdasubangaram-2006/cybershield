@@ -52,6 +52,16 @@ def create_app():
     init_db(app)
     app.jinja_env.filters["ist_datetime"] = ist_datetime
 
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        if session.get("user_id") and request.endpoint != "static":
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.before_request
     def expire_local_user_scans():
         if app.config.get("DATABASE_URL") or request.endpoint in {"health", "static"}:

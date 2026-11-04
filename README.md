@@ -48,6 +48,7 @@ To deploy updates, push changes to `master`. Render syncs the Blueprint and rede
 - Passwords are stored as hashes, not plain text.
 - Password changes and administrator resets invalidate existing login sessions for that account.
 - User scan history is scoped to the signed-in account. Admin pages are protected on the Flask server.
+- Responses include browser security headers, and signed-in pages are marked not to be cached.
 - Uploaded files are checked in memory and are not saved or executed. The file name and result are stored in account history.
 - `.env`, `.venv/`, and `instance/` are excluded from Git.
 
