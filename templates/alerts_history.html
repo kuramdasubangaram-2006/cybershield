@@ -20,7 +20,7 @@
     <div class="panel-heading">
       <div><h3>Scan history</h3><p>Newest scans appear first. Times are shown in India Standard Time.</p></div>
       {% if not admin_view %}
-        <form method="post" action="{{ url_for('clear_user_history') }}" onsubmit="return confirm('Hide all scans from your account history? Admins can still view them until they expire or are cleared by an Admin.');">
+        <form method="post" action="{{ url_for('clear_user_history') }}" onsubmit="return confirm('Clear your scan history? Admins can still see it.');">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="clear-history-button" type="submit">Clear my history</button>
         </form>
