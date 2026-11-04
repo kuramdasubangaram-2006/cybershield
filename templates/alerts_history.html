@@ -8,8 +8,8 @@
   <section class="content-panel">
     <div class="panel-heading"><div><h3>Items for review</h3><p>Scans marked Low, High, or Critical by the local checks.</p></div><span class="risk-pill risk-low">{{ review_items|length }} ITEMS</span></div>
     {% if review_items %}
-      <div class="table-responsive"><table class="data-table"><thead><tr>{% if admin_view %}<th>User</th>{% endif %}<th>Module</th><th>Target</th><th>Risk</th><th>Summary</th><th>Time (IST)</th></tr></thead><tbody>
-        {% for scan in review_items %}<tr>{% if admin_view %}<td>{{ scan.email }}</td>{% endif %}<td>{{ scan.module }}</td><td><a class="scan-detail-link" href="{{ url_for('scan_detail', scan_id=scan.id) }}">{{ scan.target }}</a></td><td><span class="risk-pill risk-{{ scan.risk|risk_level|lower }}">{{ scan.risk|risk_level }}</span></td><td>{{ scan.summary }}</td><td>{{ scan.created_at|ist_datetime }}</td></tr>{% endfor %}
+      <div class="table-responsive"><table class="data-table"><thead><tr>{% if admin_view %}<th>User</th>{% endif %}<th>Module</th><th>Target</th><th>Risk</th><th>Summary</th><th>Time (IST)</th><th>View</th></tr></thead><tbody>
+        {% for scan in review_items %}<tr>{% if admin_view %}<td>{{ scan.email }}</td>{% endif %}<td>{{ scan.module }}</td><td>{{ scan.target }}</td><td><span class="risk-pill risk-{{ scan.risk|risk_level|lower }}">{{ scan.risk|risk_level }}</span></td><td>{{ scan.summary }}</td><td>{{ scan.created_at|ist_datetime }}</td><td><a class="detail-view-button" href="{{ url_for('scan_detail', scan_id=scan.id) }}">View</a></td></tr>{% endfor %}
       </tbody></table></div>
     {% else %}
       <div class="empty-state"><span class="empty-icon" aria-hidden="true">✓</span><strong>No items marked for review</strong><p>New scans marked Low, High, or Critical will appear here.</p></div>
@@ -43,8 +43,8 @@
       <p class="role-note left-note history-retention-note">User-cleared scans remain visible here until they expire after 24 hours or an Admin clears them. Use the separate controls above to permanently delete User or Admin scan history.</p>
     {% endif %}
     {% if scans %}
-      <div class="table-responsive"><table class="data-table"><thead><tr>{% if admin_view %}<th>User</th><th>User visibility</th>{% endif %}<th>Module</th><th>Target</th><th>Risk</th><th>Time (IST)</th></tr></thead><tbody>
-        {% for scan in scans %}<tr>{% if admin_view %}<td>{{ scan.email }}</td><td>{% if scan.user_hidden_at %}Hidden from User{% else %}Visible to User{% endif %}</td>{% endif %}<td>{{ scan.module }}</td><td><a class="scan-detail-link" href="{{ url_for('scan_detail', scan_id=scan.id) }}">{{ scan.target }}</a></td><td><span class="risk-pill risk-{{ scan.risk|risk_level|lower }}">{{ scan.risk|risk_level }}</span></td><td>{{ scan.created_at|ist_datetime }}</td></tr>{% endfor %}
+      <div class="table-responsive"><table class="data-table"><thead><tr>{% if admin_view %}<th>User</th><th>User visibility</th>{% endif %}<th>Module</th><th>Target</th><th>Risk</th><th>Time (IST)</th><th>View</th></tr></thead><tbody>
+        {% for scan in scans %}<tr>{% if admin_view %}<td>{{ scan.email }}</td><td>{% if scan.user_hidden_at %}Hidden from User{% else %}Visible to User{% endif %}</td>{% endif %}<td>{{ scan.module }}</td><td>{{ scan.target }}</td><td><span class="risk-pill risk-{{ scan.risk|risk_level|lower }}">{{ scan.risk|risk_level }}</span></td><td>{{ scan.created_at|ist_datetime }}</td><td><a class="detail-view-button" href="{{ url_for('scan_detail', scan_id=scan.id) }}">View</a></td></tr>{% endfor %}
       </tbody></table></div>
     {% else %}
       <div class="empty-state"><strong>No scans in history yet</strong><p>Results from analysis tools will be listed here.</p></div>
