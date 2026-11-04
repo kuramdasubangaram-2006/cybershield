@@ -5,6 +5,7 @@ CyberShield is a Flask web app for basic security checks, account management, an
 ## Features
 
 - Admin and User accounts. Admins can review all accounts and scans; users can view only their own scans.
+- Users can change their password; Admins can set a temporary password for User accounts.
 - IP address format and address-range checks.
 - URL structure checks that do not open or contact the submitted site.
 - File metadata and signature checks performed in memory.
@@ -44,6 +45,7 @@ To deploy updates, push changes to `master`. Render syncs the Blueprint and rede
 ## Data and privacy
 
 - Passwords are stored as hashes, not plain text.
+- Password changes and administrator resets invalidate existing login sessions for that account.
 - User scan history is scoped to the signed-in account. Admin pages are protected on the Flask server.
 - Uploaded files are checked in memory and are not saved or executed. The file name and result are stored in account history.
 - `.env`, `.venv/`, and `instance/` are excluded from Git.

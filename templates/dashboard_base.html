@@ -29,6 +29,7 @@
           <a class="side-link {% if request.endpoint == 'analyze_log_text' %}active{% endif %}" href="{{ url_for('analyze_log_text') }}"><span>≋</span> Log Analysis</a>
           <a class="side-link {% if request.endpoint == 'alerts_history' %}active{% endif %}" href="{{ url_for('alerts_history') }}"><span>◷</span> Alerts &amp; History</a>
           <a class="side-link {% if request.endpoint in ['reports', 'download_report'] %}active{% endif %}" href="{{ url_for('reports') }}"><span>▧</span> Reports</a>
+          <a class="side-link {% if request.endpoint == 'change_password' %}active{% endif %}" href="{{ url_for('change_password') }}"><span>⚿</span> Change password</a>
         </nav>
         <div class="sidebar-bottom"><span class="status-pulse"></span> System ready <small>MVP</small></div>
       </aside>

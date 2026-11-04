@@ -2,6 +2,7 @@
 
 from functools import wraps
 import csv
+import hashlib
 import hmac
 import io
 import os
@@ -13,6 +14,7 @@ from dotenv import load_dotenv
 from flask import (
     Flask,
     abort,
+    current_app,
     flash,
     g,
     jsonify,
@@ -83,13 +85,15 @@ def create_app():
                 flash("The passwords do not match.", "error")
             else:
                 db = get_db()
+                password_hash = generate_password_hash(password)
                 cursor = db.execute(
                     "INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin') RETURNING id",
-                    (email, generate_password_hash(password)),
+                    (email, password_hash),
                 )
                 db.commit()
                 session.clear()
                 session["user_id"] = cursor.fetchone()["id"]
+                session["password_token"] = make_password_token(password_hash)
                 flash("Administrator account created successfully.", "success")
                 return redirect(url_for("dashboard"))
 
@@ -117,6 +121,7 @@ def create_app():
             else:
                 session.clear()
                 session["user_id"] = user["id"]
+                session["password_token"] = make_password_token(user["password_hash"])
                 session.permanent = "remember" in request.form
                 return redirect(url_for("dashboard"))
 
@@ -128,6 +133,48 @@ def create_app():
             abort(400)
         session.clear()
         return redirect(url_for("login"))
+
+    @app.route("/account/password", methods=["GET", "POST"])
+    @login_required
+    def change_password():
+        user = get_current_user()
+
+        if request.method == "POST":
+            if not validate_csrf():
+                abort(400)
+
+            current_password = request.form.get("current_password", "")
+            new_password = request.form.get("new_password", "")
+            confirmation = request.form.get("password_confirmation", "")
+            account = get_db().execute(
+                "SELECT password_hash FROM users WHERE id = ?", (user["id"],)
+            ).fetchone()
+
+            if account is None or not check_password_hash(account["password_hash"], current_password):
+                flash("Your current password is incorrect.", "error")
+            elif len(new_password) < 12:
+                flash("New password must be at least 12 characters.", "error")
+            elif new_password != confirmation:
+                flash("The new passwords do not match.", "error")
+            elif new_password == current_password:
+                flash("Choose a new password different from your current one.", "error")
+            else:
+                db = get_db()
+                new_hash = generate_password_hash(new_password)
+                db.execute(
+                    "UPDATE users SET password_hash = ? WHERE id = ?",
+                    (new_hash, user["id"]),
+                )
+                db.commit()
+                was_permanent = session.permanent
+                session.clear()
+                session["user_id"] = user["id"]
+                session["password_token"] = make_password_token(new_hash)
+                session.permanent = was_permanent
+                flash("Password changed successfully.", "success")
+                return redirect(url_for("change_password"))
+
+        return render_template("change_password.html", page_title="Change password")
 
     @app.get("/dashboard")
     @login_required
@@ -380,6 +427,35 @@ def create_app():
         ).fetchall()
         return render_template("manage_users.html", users=users, page_title="Manage users")
 
+    @app.post("/admin/users/reset-password")
+    @admin_required
+    def reset_user_password():
+        if not validate_csrf():
+            abort(400)
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+
+        if not valid_email(email):
+            flash("Enter a valid user email address.", "error")
+        elif len(password) < 12:
+            flash("Temporary password must be at least 12 characters.", "error")
+        else:
+            db = get_db()
+            account = db.execute(
+                "SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND role = 'user'", (email,)
+            ).fetchone()
+            if account is None:
+                flash("User account not found.", "error")
+            else:
+                password_hash = generate_password_hash(password)
+                db.execute(
+                    "UPDATE users SET password_hash = ? WHERE id = ?",
+                    (password_hash, account["id"]),
+                )
+                db.commit()
+                flash("Temporary password reset. Share it privately and ask the user to change it after signing in.", "success")
+        return redirect(url_for("manage_users"))
+
     @app.get("/health")
     def health():
         return jsonify(status="ok", app="CyberShield"), 200
@@ -427,15 +503,28 @@ def validate_csrf():
     return bool(expected and supplied and hmac.compare_digest(expected, supplied))
 
 
+def make_password_token(password_hash):
+    key = str(current_app.config["SECRET_KEY"]).encode("utf-8")
+    return hmac.new(key, password_hash.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
 def get_current_user():
     if "current_user" not in g:
         user_id = session.get("user_id")
         if user_id is None:
             g.current_user = None
         else:
-            g.current_user = get_db().execute(
-                "SELECT id, email, role FROM users WHERE id = ?", (user_id,)
+            account = get_db().execute(
+                "SELECT id, email, role, password_hash FROM users WHERE id = ?", (user_id,)
             ).fetchone()
+            supplied_token = session.get("password_token", "")
+            if account is None or not hmac.compare_digest(
+                supplied_token, make_password_token(account["password_hash"])
+            ):
+                session.clear()
+                g.current_user = None
+            else:
+                g.current_user = {key: account[key] for key in ("id", "email", "role")}
     return g.current_user
 
 

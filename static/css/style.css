@@ -275,6 +275,9 @@ body.login-page {
 .create-user-form { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto; align-items: end; gap: 13px; }
 .create-user-button { min-width: 150px; min-height: 49px; padding: 0 14px; }
 .left-note { margin-top: 14px; text-align: left; }
+.password-change-panel { max-width: 680px; }
+.password-change-form { display: grid; gap: 15px; max-width: 520px; }
+.password-change-button { min-height: 47px; justify-self: start; padding: 0 16px; }
 .error-card { width: min(460px, calc(100% - 40px)); margin: 12vh auto; padding: 36px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
 .error-card h1 { margin: 10px 0; font-size: 3rem; }
 .error-card > p:not(.eyebrow) { margin-bottom: 24px; color: var(--muted); }

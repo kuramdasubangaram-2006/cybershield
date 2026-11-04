@@ -14,7 +14,18 @@
       <div><label class="form-label" for="password">Temporary password</label><input class="form-control" id="password" name="password" type="password" placeholder="At least 12 characters" minlength="12" required></div>
       <button class="btn sign-in-button create-user-button" type="submit">Create user <span aria-hidden="true">→</span></button>
     </form>
-    <p class="role-note left-note">Share the temporary password directly with the user and ask them to change it after signing in. Password reset/change is a follow-up item.</p>
+    <p class="role-note left-note">Share the temporary password directly with the user and ask them to change it after signing in from the workspace menu.</p>
+  </section>
+
+  <section class="content-panel create-user-panel">
+    <div class="panel-heading"><div><h3>Reset a user password</h3><p>Set a temporary password for an existing User account.</p></div></div>
+    <form class="create-user-form" method="post" action="{{ url_for('reset_user_password') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label class="form-label" for="reset-email">User email</label><input class="form-control" id="reset-email" name="email" type="email" placeholder="user@example.com" maxlength="254" required></div>
+      <div><label class="form-label" for="reset-password">Temporary password</label><input class="form-control" id="reset-password" name="password" type="password" placeholder="At least 12 characters" minlength="12" required></div>
+      <button class="btn sign-in-button create-user-button" type="submit">Reset password <span aria-hidden="true">→</span></button>
+    </form>
+    <p class="role-note left-note">Share the temporary password privately. The user's existing sessions are signed out automatically.</p>
   </section>
 
   <section class="content-panel">

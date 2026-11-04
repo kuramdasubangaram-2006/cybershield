@@ -16,7 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   forgotPassword?.addEventListener("click", () => {
     if (!message) return;
-    message.textContent = "Password reset is not available yet. Ask your administrator for help.";
+    message.textContent = "Password recovery is not available on this page. User accounts can ask an administrator to set a temporary password.";
     message.classList.remove("d-none");
   });
 });
