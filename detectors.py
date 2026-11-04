@@ -19,42 +19,49 @@ def analyze_ip(value):
         summary = "This address points back to the same device; it is not a public reputation result."
         indicators = ["The address is reserved for the local device."]
         recommendations = ["Confirm that a local-device address is what you intended to review."]
+        explanation = "This address points back to the same device. It is a local network value, not a public site's reputation result."
     elif address.is_link_local:
         label = "Link-local address"
         risk = "Normal"
         summary = "This address is used on a local network and is not globally reachable."
         indicators = ["The address is link-local."]
         recommendations = ["Compare the address with the expected local network range."]
+        explanation = "A link-local address is normally used on the same local network segment and is not generally routed across the public internet."
     elif address.is_private:
         label = "Private network address"
         risk = "Normal"
         summary = "This address belongs to a private network; its public threat reputation cannot be checked here."
         indicators = ["The address is not globally routable."]
         recommendations = ["Compare the address with the expected private network range."]
+        explanation = "Private addresses are reused inside homes and organizations. The format check can identify that range, but it cannot tell whether activity from a particular device is trustworthy."
     elif address.is_multicast or address.is_unspecified or address.is_reserved:
         label = "Special-purpose address"
         risk = "Low"
         summary = "This is a special-purpose address, not a normal public host reputation result."
         indicators = ["The address is reserved for a special networking purpose."]
         recommendations = ["Confirm this special-purpose address is expected in your network context."]
+        explanation = "This address range is reserved for a networking purpose rather than ordinary public hosting. Confirm that the value makes sense for the system you are checking."
     elif address.is_global:
         label = "Public IP — reputation unverified"
         risk = "Normal"
         summary = "The address is globally routable. No threat-intelligence source is connected, so its reputation is unknown."
         indicators = ["Local format and address-range checks only; no live reputation lookup was performed."]
         recommendations = ["Check an approved threat-intelligence source before trusting this public address."]
+        explanation = "This is a globally routable address, but global reachability does not reveal its owner or reputation. CyberShield checked only the address format and range."
     else:
         label = "Non-public address"
         risk = "Normal"
         summary = "This address is not globally routable. No public threat reputation was checked."
         indicators = ["The address is outside the public global address space."]
         recommendations = ["Compare the address with the expected network range; no public reputation check was performed."]
+        explanation = "The address is outside the public global range. This local classification says nothing about whether the related activity was expected."
 
     return {
         "label": label,
         "risk": risk,
         "summary": summary,
         "indicators": indicators,
+        "explanation": explanation,
         "recommendations": recommendations,
         "facts": {"IP version": f"IPv{address.version}", "Globally routable": "Yes" if address.is_global else "No"},
         "target": str(address),
@@ -117,23 +124,27 @@ def analyze_url(value):
         risk = "High"
         summary = "Potentially deceptive URL structure found. Do not open it until it has been reviewed."
         recommendations = ["Do not open the URL or enter credentials. Verify the complete hostname with the expected organization through a trusted channel."]
+        explanation = "One or more stronger URL-structure warning signs matched. An IP address in place of a domain, hidden user information, or punycode can make a destination harder to recognize. These signs are reasons to inspect the link; they do not prove that the site is malicious."
     elif caution_indicators:
         label = "Needs review"
         risk = "Low"
         summary = "Some structural caution signs were found. No live threat-reputation check was performed."
         recommendations = ["Check the hostname and scheme carefully. Avoid entering passwords until you confirm the destination."]
+        explanation = "Some caution signs matched, such as a non-HTTPS scheme, many subdomain levels, or an unusually long URL. These can occur on ordinary sites too, so verify the exact destination before using it."
     else:
         label = "No obvious structural warning — unverified"
         risk = "Normal"
         summary = "No obvious structural warning was found. This does not confirm that the URL is safe."
         indicators.append("No live threat-intelligence lookup was performed.")
         recommendations = ["Confirm the website address independently before signing in or sharing sensitive information."]
+        explanation = "The local structure check did not find its configured warning signs. CyberShield did not open the site, check its ownership, or compare it with live threat reports, so this is not a safety verdict."
 
     return {
         "label": label,
         "risk": risk,
         "summary": summary,
         "indicators": indicators,
+        "explanation": explanation,
         "recommendations": recommendations,
         "facts": {
             "Hostname": host,
@@ -215,11 +226,18 @@ def analyze_file(filename, content):
         if caution else
         ["No warning was found in the limited checks. Use trusted endpoint-security software before opening an unknown file."]
     )
+    if strong_caution:
+        explanation = "The file has a stronger name or signature mismatch warning. Multiple extensions or a mismatch involving executable content can disguise what a file may do. This is a warning sign, not proof that the file is malware."
+    elif caution:
+        explanation = "The file name or short signature indicates executable or script content. Many legitimate programs use these formats, but opening an untrusted program can run its code. No antivirus scan was performed."
+    else:
+        explanation = "The short signature check did not find a configured executable or extension mismatch warning. CyberShield did not inspect all file contents or run antivirus checks; archives and document internals may not have been examined."
     return {
         "label": "File needs review" if caution else "Basic file checks — no warning found",
         "risk": risk,
         "summary": "Basic metadata and file-signature checks only. No antivirus scan was performed, so this file is not confirmed safe.",
         "indicators": indicators,
+        "explanation": explanation,
         "recommendations": recommendations,
         "facts": {"Detected type": detected_type, "File size": f"{size} bytes", "Extension": suffix or "None"},
         "target": name,
@@ -277,10 +295,13 @@ def analyze_logs(value):
     any_match = any(counts.values())
     if failed >= 10:
         recommendations = ["Review the source addresses and times, confirm whether the attempts were expected, and secure affected accounts if they were not."]
+        explanation = "Many lines matched common authentication-failure phrases. This can be consistent with repeated guessing, but it could also be expected activity or duplicated logging. Check timing, source addresses, and account context."
     elif needs_review:
         recommendations = ["Review the matching log entries in context and confirm that the account or privileged activity was expected."]
+        explanation = "One or more lines matched common failure, privileged-command, or account-change phrases. The analyzer searches words only; it does not validate the event source or determine whether the action was authorized."
     else:
         recommendations = ["No configured warning keywords matched. Compare with other system logs; this does not prove the system is safe."]
+        explanation = "No configured high-priority phrases matched. If successful-login phrases were found, they are shown as counts; absence of warning phrases does not prove the system is free of suspicious activity."
     return {
         "label": (
             "Log activity needs review" if needs_review
@@ -290,6 +311,7 @@ def analyze_logs(value):
         "risk": "High" if failed >= 10 else "Low" if needs_review else "Normal",
         "summary": f"Basic keyword checks reviewed {len(lines)} non-empty log line(s). This is not a complete security analysis.",
         "indicators": indicators,
+        "explanation": explanation,
         "recommendations": recommendations,
         "facts": {
             "Lines reviewed": str(len(lines)),

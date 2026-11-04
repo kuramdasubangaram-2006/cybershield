@@ -9,6 +9,7 @@
     <div class="panel-heading"><div><h3>What was reviewed</h3><p>{{ scan.created_at|ist_datetime }} IST</p></div></div>
     <p class="result-target">{{ scan.target }}</p>
     <p class="result-summary">{{ scan.summary }}</p>
+    <div class="indicator-block detail-explanation"><h4>Detailed explanation</h4><p>{{ details.explanation or "Detailed findings are not available for this older scan. New scans include the checks and recommendations." }}</p></div>
     <p class="role-note left-note">
       {% if scan.module == 'IP Detection' %}Address format and network range were checked locally; the IP was not contacted and no reputation lookup was made.
       {% elif scan.module == 'URL Scanner' %}URL structure was checked locally; the website was not opened or contacted.
@@ -36,6 +37,16 @@
       <ul class="detail-list">{% for item in details.recommendations %}<li>{{ item }}</li>{% endfor %}</ul>
     </section>
   {% endif %}
+
+  <section class="content-panel">
+    <div class="panel-heading"><div><h3>How to read this risk level</h3><p>CyberShield uses local checks and cannot guarantee that an item is safe.</p></div></div>
+    <p class="result-summary">
+      {% if scan.risk|risk_level == 'Normal' %}Normal means these checks found no configured warning. The item may still be risky because live reputation and antivirus checks were not performed.
+      {% elif scan.risk|risk_level == 'Low' %}Low means one or more caution signs matched. Review the indicators and context before acting.
+      {% elif scan.risk|risk_level == 'High' %}High means a stronger warning pattern matched. Avoid opening, running, or trusting the item until you verify it independently.
+      {% else %}Critical is reserved for a severe finding with strong confirmation. The current local-only checks do not assign this level.{% endif %}
+    </p>
+  </section>
 
   {% if not details.indicators and not details.facts %}
     <section class="content-panel"><div class="empty-state"><strong>Detailed findings are not available for this older scan</strong><p>New scans save structured local findings. Original uploaded files and pasted log text are not retained.</p></div></section>

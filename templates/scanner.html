@@ -29,6 +29,7 @@
       </div>
       <p class="result-target">{{ result.target }}</p>
       <p class="result-summary">{{ result.summary }}</p>
+      <p class="result-summary">{{ result.explanation }}</p>
       <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
       <div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>
     </section>

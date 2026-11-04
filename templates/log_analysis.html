@@ -23,6 +23,7 @@
         <span class="risk-pill risk-{{ result.risk|risk_level|lower }}">{{ result.risk|risk_level }}</span>
       </div>
       <p class="result-summary">{{ result.summary }}</p>
+      <p class="result-summary">{{ result.explanation }}</p>
       <div class="log-count-grid">
         <div><span>Lines reviewed</span><strong>{{ result.line_count }}</strong></div>
         <div><span>Authentication failures</span><strong>{{ result.counts.authentication_failures }}</strong></div>

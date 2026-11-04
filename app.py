@@ -52,7 +52,7 @@ def risk_level(value):
 def persisted_analysis_details(result):
     """Keep derived findings only; never persist uploaded bytes or pasted log text."""
     allowed = {
-        "label", "indicators", "recommendations", "facts", "line_count", "counts",
+        "label", "explanation", "indicators", "recommendations", "facts", "line_count", "counts",
         "file_type", "size", "sha256",
     }
     return {key: value for key, value in result.items() if key in allowed}
