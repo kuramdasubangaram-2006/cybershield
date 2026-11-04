@@ -2,6 +2,7 @@
 
 from functools import wraps
 import csv
+from email.message import EmailMessage
 import hashlib
 import hmac
 import http.client
@@ -9,6 +10,8 @@ import io
 import json
 import os
 import secrets
+import smtplib
+import ssl
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -94,6 +97,11 @@ def create_app():
         SECRET_KEY=load_secret_key(app.instance_path),
         DATABASE=os.path.join(app.instance_path, "cybershield.sqlite3"),
         DATABASE_URL=os.getenv("DATABASE_URL", "").strip(),
+        SMTP_HOST=os.getenv("SMTP_HOST", "").strip(),
+        SMTP_PORT=os.getenv("SMTP_PORT", "587").strip(),
+        SMTP_USER=os.getenv("SMTP_USER", "").strip(),
+        SMTP_PASSWORD=os.getenv("SMTP_PASSWORD", ""),
+        SMTP_FROM=os.getenv("SMTP_FROM", "").strip(),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE", "0") == "1",
@@ -205,6 +213,101 @@ def create_app():
                 return redirect(url_for("dashboard"))
 
         return render_template("login.html")
+
+    @app.route("/forgot-password", methods=["GET", "POST"])
+    def forgot_password():
+        if request.method == "POST":
+            if not validate_csrf():
+                abort(400)
+            email = request.form.get("email", "").strip().lower()
+            if not valid_email(email):
+                flash("Enter the email address for your CyberShield account.", "error")
+            elif not smtp_is_configured():
+                flash("Email delivery is not configured yet. Ask the administrator to configure SMTP in Render.", "error")
+            else:
+                account = get_db().execute(
+                    "SELECT id, email FROM users WHERE LOWER(email) = LOWER(?)", (email,)
+                ).fetchone()
+                if account is not None:
+                    db = get_db()
+                    previous = db.execute(
+                        "SELECT requested_at FROM password_reset_codes WHERE user_id = ?",
+                        (account["id"],),
+                    ).fetchone()
+                    now = datetime.now(timezone.utc)
+                    if previous is None or now - parse_utc_datetime(previous["requested_at"]) >= timedelta(seconds=60):
+                        code = f"{secrets.randbelow(1_000_000):06d}"
+                        expires_at = now + timedelta(minutes=10)
+                        db.execute(
+                            "INSERT INTO password_reset_codes "
+                            "(user_id, code_hash, expires_at, attempt_count, requested_at) VALUES (?, ?, ?, 0, ?) "
+                            "ON CONFLICT (user_id) DO UPDATE SET code_hash = excluded.code_hash, "
+                            "expires_at = excluded.expires_at, attempt_count = 0, requested_at = excluded.requested_at",
+                            (account["id"], password_reset_code_digest(account["id"], code),
+                             expires_at.isoformat(), now.isoformat()),
+                        )
+                        db.commit()
+                        if not send_password_reset_email(account["email"], code):
+                            db.execute("DELETE FROM password_reset_codes WHERE user_id = ?", (account["id"],))
+                            db.commit()
+                flash("If that email belongs to a CyberShield account, a one-time code will be sent. It expires in 10 minutes. Check spam or ask the administrator to verify email delivery if it does not arrive.", "success")
+                return redirect(url_for("reset_password"))
+        return render_template("forgot_password.html", page_title="Forgot password")
+
+    @app.route("/reset-password", methods=["GET", "POST"])
+    def reset_password():
+        if request.method == "POST":
+            if not validate_csrf():
+                abort(400)
+            email = request.form.get("email", "").strip().lower()
+            code = request.form.get("code", "").strip()
+            new_password = request.form.get("new_password", "")
+            confirmation = request.form.get("password_confirmation", "")
+
+            if not valid_email(email):
+                flash("Enter the email address for your CyberShield account.", "error")
+            elif not code.isascii() or not code.isdecimal() or len(code) != 6:
+                flash("Enter the 6-digit code from your email.", "error")
+            elif len(new_password) < 12:
+                flash("New password must be at least 12 characters.", "error")
+            elif new_password != confirmation:
+                flash("The passwords do not match.", "error")
+            else:
+                db = get_db()
+                account = db.execute(
+                    "SELECT users.id, password_reset_codes.code_hash, password_reset_codes.expires_at, "
+                    "password_reset_codes.attempt_count FROM users "
+                    "JOIN password_reset_codes ON password_reset_codes.user_id = users.id "
+                    "WHERE LOWER(users.email) = LOWER(?)",
+                    (email,),
+                ).fetchone()
+                if account is None:
+                    flash("The code is invalid or expired. Request a new code and try again.", "error")
+                elif account["attempt_count"] >= 5:
+                    db.execute("DELETE FROM password_reset_codes WHERE user_id = ?", (account["id"],))
+                    db.commit()
+                    flash("Too many incorrect code attempts. Request a new code.", "error")
+                elif datetime.now(timezone.utc) >= parse_utc_datetime(account["expires_at"]):
+                    db.execute("DELETE FROM password_reset_codes WHERE user_id = ?", (account["id"],))
+                    db.commit()
+                    flash("The code has expired. Request a new one.", "error")
+                elif not hmac.compare_digest(
+                    account["code_hash"], password_reset_code_digest(account["id"], code)
+                ):
+                    db.execute(
+                        "UPDATE password_reset_codes SET attempt_count = attempt_count + 1 WHERE user_id = ?",
+                        (account["id"],),
+                    )
+                    db.commit()
+                    flash("The code is invalid or expired. Request a new code and try again.", "error")
+                else:
+                    password_hash = generate_password_hash(new_password)
+                    db.execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, account["id"]))
+                    db.execute("DELETE FROM password_reset_codes WHERE user_id = ?", (account["id"],))
+                    db.commit()
+                    flash("Password reset successfully. Sign in with your new password.", "success")
+                    return redirect(url_for("login"))
+        return render_template("reset_password.html", page_title="Reset password")
 
     @app.post("/logout")
     def logout():
@@ -714,6 +817,67 @@ def csrf_token():
         token = secrets.token_urlsafe(32)
         session["_csrf_token"] = token
     return token
+
+
+def smtp_is_configured():
+    try:
+        port = int(current_app.config.get("SMTP_PORT", "587"))
+    except (TypeError, ValueError):
+        return False
+    return bool(
+        current_app.config.get("SMTP_HOST")
+        and current_app.config.get("SMTP_USER")
+        and current_app.config.get("SMTP_PASSWORD")
+        and 1 <= port <= 65535
+    )
+
+
+def send_password_reset_email(recipient, code):
+    if not smtp_is_configured():
+        return False
+    host = current_app.config["SMTP_HOST"]
+    port = int(current_app.config["SMTP_PORT"])
+    username = current_app.config["SMTP_USER"]
+    password = current_app.config["SMTP_PASSWORD"]
+    sender = current_app.config.get("SMTP_FROM") or username
+    message = EmailMessage()
+    message["Subject"] = "Your CyberShield password reset code"
+    message["From"] = sender
+    message["To"] = recipient
+    message.set_content(
+        f"Your CyberShield password reset code is {code}.\n\n"
+        "It expires in 10 minutes and can be used only once. If you did not request it, ignore this email."
+    )
+    try:
+        if port == 465:
+            with smtplib.SMTP_SSL(host, port, timeout=12, context=ssl.create_default_context()) as server:
+                server.login(username, password)
+                server.send_message(message)
+        else:
+            with smtplib.SMTP(host, port, timeout=12) as server:
+                server.ehlo()
+                server.starttls(context=ssl.create_default_context())
+                server.ehlo()
+                server.login(username, password)
+                server.send_message(message)
+    except (OSError, smtplib.SMTPException, ValueError):
+        current_app.logger.error("Password reset email delivery failed.")
+        return False
+    return True
+
+
+def password_reset_code_digest(user_id, code):
+    secret = str(current_app.config["SECRET_KEY"]).encode("utf-8")
+    payload = f"password-reset:{user_id}:{code}".encode("utf-8")
+    return hmac.new(secret, payload, hashlib.sha256).hexdigest()
+
+
+def parse_utc_datetime(value):
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def load_secret_key(instance_path):

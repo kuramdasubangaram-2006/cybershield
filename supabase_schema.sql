@@ -40,6 +40,14 @@ CREATE TABLE IF NOT EXISTS public.scan_rate_limits (
     PRIMARY KEY (user_id, window_start)
 );
 
+CREATE TABLE IF NOT EXISTS public.password_reset_codes (
+    user_id BIGINT PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    requested_at TIMESTAMPTZ NOT NULL
+);
+
 ALTER TABLE public.scans
     ADD COLUMN IF NOT EXISTS user_hidden_at TIMESTAMPTZ;
 ALTER TABLE public.scans
@@ -59,3 +67,4 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.scans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_activity ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.scan_rate_limits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.password_reset_codes ENABLE ROW LEVEL SECURITY;

@@ -70,7 +70,7 @@
             <div class="mb-2">
               <div class="password-label-row">
                 <label class="form-label" for="password">Password</label>
-                <button class="text-link" id="forgot-password" type="button">Forgot password?</button>
+                <a class="text-link" id="forgot-password" href="{{ url_for('forgot_password') }}">Forgot password?</a>
               </div>
               <div class="password-input-wrap">
                 <input class="form-control" id="password" name="password" type="password" placeholder="Enter your password" autocomplete="current-password" required>
@@ -84,7 +84,6 @@
             </div>
 
             <button class="btn sign-in-button w-100" type="submit">Sign in <span aria-hidden="true">→</span></button>
-            <p class="form-message d-none" id="form-message" role="status" aria-live="polite"></p>
           </form>
 
           <div class="login-divider"><span></span><small>CYBERSHIELD ACCESS</small><span></span></div>

@@ -16,6 +16,7 @@ CyberShield is a Flask web app for basic security checks, account management, an
 - Scan detail pages can be downloaded as a single-scan PDF report.
 - Scan submissions are limited to five per account per UTC minute window.
 - Administrators can review a private activity log for successful sign-ins, account changes, scan-history clearing, and report exports.
+- Users and Admins can reset a forgotten password using a one-time email code; the code expires after 10 minutes and allows at most five attempts.
 - Risk labels are Normal, Low, High, and Critical. Critical is reserved for strong confirmed evidence and is not currently assigned by local-only checks.
 
 These tools provide basic local indicators. They do not perform live threat-intelligence lookups, antivirus scans, or a complete security analysis. `Normal` means only that these limited checks found no warning; it does not confirm that an item is safe.
@@ -41,6 +42,8 @@ Copy-Item .env.example .env
 Open `http://127.0.0.1:5000/`. If the selected database has no administrator account, follow the setup page to create one. Admins can create User accounts from **Users**.
 
 By default, local development uses SQLite in `instance/cybershield.sqlite3`. To use Supabase locally, set `DATABASE_URL` in `.env` to the PostgreSQL connection string and apply `supabase_schema.sql` in the Supabase SQL Editor first. Keep `.env` private; it is excluded by `.gitignore`.
+
+Forgot-password email delivery requires SMTP settings (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and optionally `SMTP_FROM`). Set these values in the local `.env` or Render's private environment settings. SMTP is sent over TLS; never commit the mail password. Existing hosted databases also need `supabase_password_reset.sql` run once before deploying the password-recovery update.
 
 For an existing hosted CyberShield Supabase database, run `supabase_app_controls.sql` once in the SQL Editor before deploying updates. It creates the private admin activity and scan-limit tables.
 

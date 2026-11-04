@@ -94,6 +94,14 @@ def init_db(app):
                 request_count INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (user_id, window_start)
             );
+
+            CREATE TABLE IF NOT EXISTS password_reset_codes (
+                user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                code_hash TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                requested_at TEXT NOT NULL
+            );
             """
         )
         scan_columns = {row["name"] for row in get_db().execute("PRAGMA table_info(scans)").fetchall()}
