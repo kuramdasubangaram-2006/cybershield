@@ -15,14 +15,14 @@
         <button class="btn sign-in-button scanner-button" type="submit">Analyze <span aria-hidden="true">→</span></button>
       </div>
     </form>
-    <p class="scanner-privacy-note"><span class="secure-dot"></span> The file is checked in memory and not saved. Its name and result are added to your account scan history; the hash is shown here only.</p>
+    <p class="scanner-privacy-note"><span class="secure-dot"></span> The file itself is checked in memory and not saved. Its name, hash, type, size, and findings are added to your account history.</p>
   </section>
 
   {% if result %}
     <section class="content-panel result-panel" aria-live="polite">
       <div class="result-topline">
         <div><p class="eyebrow">ANALYSIS RESULT</p><h3>{{ result.label }}</h3></div>
-        <span class="risk-pill risk-{{ result.risk|lower|replace(' ', '-') }}">{{ result.risk }}</span>
+        <span class="risk-pill risk-{{ result.risk|risk_level|lower }}">{{ result.risk|risk_level }}</span>
       </div>
       <p class="result-target">{{ result.target }}</p>
       <p class="result-summary">{{ result.summary }}</p>
@@ -32,8 +32,9 @@
         <div class="hash-fact"><span>SHA-256</span><code>{{ result.sha256 }}</code></div>
       </div>
       <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
+      <div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>
     </section>
   {% endif %}
 
-  <section class="scanner-disclaimer"><strong>Important:</strong> This is not an antivirus scan. A file marked “Unverified” is unknown, not safe. Do not open or run files you do not trust.</section>
+  <section class="scanner-disclaimer"><strong>Important:</strong> This is not an antivirus scan. “Normal” means no warning was found in these basic checks; it does not prove the file is safe. Do not open or run files you do not trust.</section>
 {% endblock %}

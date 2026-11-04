@@ -13,14 +13,14 @@
       <textarea class="form-control log-textarea" id="log_text" name="log_text" rows="9" maxlength="20000" placeholder="Paste a small log sample here…" required>{{ submitted_text }}</textarea>
       <button class="btn sign-in-button log-submit-button" type="submit">Analyze logs <span aria-hidden="true">→</span></button>
     </form>
-    <p class="scanner-privacy-note"><span class="secure-dot"></span> The submitted lines are checked in memory and not saved. Only the line count, result, and summary are added to your account history. Avoid pasting passwords, tokens, or other secrets.</p>
+    <p class="scanner-privacy-note"><span class="secure-dot"></span> The submitted lines are checked in memory and not saved. Only counts and findings are added to your account history. Avoid pasting passwords, tokens, or other secrets.</p>
   </section>
 
   {% if result %}
     <section class="content-panel result-panel" aria-live="polite">
       <div class="result-topline">
         <div><p class="eyebrow">ANALYSIS RESULT</p><h3>{{ result.label }}</h3></div>
-        <span class="risk-pill risk-{{ result.risk|lower|replace(' ', '-') }}">{{ result.risk }}</span>
+        <span class="risk-pill risk-{{ result.risk|risk_level|lower }}">{{ result.risk|risk_level }}</span>
       </div>
       <p class="result-summary">{{ result.summary }}</p>
       <div class="log-count-grid">
@@ -31,6 +31,7 @@
         <div><span>Account change phrases</span><strong>{{ result.counts.account_changes }}</strong></div>
       </div>
       <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
+      <div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>
     </section>
   {% endif %}
 

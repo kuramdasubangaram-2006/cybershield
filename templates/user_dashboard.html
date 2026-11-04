@@ -16,7 +16,7 @@
     <div class="panel-heading"><div><h3>My recent activity</h3><p>Only records owned by your account are listed.</p></div></div>
     {% if recent_scans %}
       <div class="table-responsive"><table class="data-table"><thead><tr><th>Module</th><th>Target</th><th>Risk</th><th>Time (IST)</th></tr></thead><tbody>
-        {% for scan in recent_scans %}<tr><td>{{ scan.module }}</td><td>{{ scan.target }}</td><td><span class="risk-pill risk-{{ scan.risk|lower }}">{{ scan.risk }}</span></td><td>{{ scan.created_at|ist_datetime }}</td></tr>{% endfor %}
+        {% for scan in recent_scans %}<tr><td>{{ scan.module }}</td><td><a class="scan-detail-link" href="{{ url_for('scan_detail', scan_id=scan.id) }}">{{ scan.target }}</a></td><td><span class="risk-pill risk-{{ scan.risk|risk_level|lower }}">{{ scan.risk|risk_level }}</span></td><td>{{ scan.created_at|ist_datetime }}</td></tr>{% endfor %}
       </tbody></table></div>
     {% else %}
       <div class="empty-state"><span class="empty-icon">⌕</span><strong>Your activity will appear here</strong><p>Analysis tools are being added. When you scan something, only your records will show on this dashboard.</p></div>

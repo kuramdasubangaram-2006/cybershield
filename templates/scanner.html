@@ -25,13 +25,14 @@
     <section class="content-panel result-panel" aria-live="polite">
       <div class="result-topline">
         <div><p class="eyebrow">ANALYSIS RESULT</p><h3>{{ result.label }}</h3></div>
-        <span class="risk-pill risk-{{ result.risk|lower|replace(' ', '-') }}">{{ result.risk }}</span>
+        <span class="risk-pill risk-{{ result.risk|risk_level|lower }}">{{ result.risk|risk_level }}</span>
       </div>
       <p class="result-target">{{ result.target }}</p>
       <p class="result-summary">{{ result.summary }}</p>
       <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
+      <div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>
     </section>
   {% endif %}
 
-  <section class="scanner-disclaimer"><strong>Important:</strong> These are basic local indicators, not a live threat-intelligence or antivirus verdict. Treat “Unverified” as unknown, not safe.</section>
+  <section class="scanner-disclaimer"><strong>Important:</strong> These are basic local checks, not a live threat-intelligence verdict. “Normal” means no warning was found in these checks; it does not prove the item is safe.</section>
 {% endblock %}

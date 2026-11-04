@@ -12,8 +12,10 @@ CyberShield is a Flask web app for basic security checks, account management, an
 - File metadata and signature checks performed in memory.
 - Basic keyword checks for pasted log text.
 - Scan history, alerts, and downloadable reports.
+- Saved scans open a detailed view with local indicators, checked facts, and suggested next steps.
+- Risk labels are Normal, Low, High, and Critical. Critical is reserved for strong confirmed evidence and is not currently assigned by local-only checks.
 
-These tools provide basic local indicators. They do not perform live threat-intelligence lookups, antivirus scans, or a complete security analysis. Treat `Unverified` as unknown, not safe.
+These tools provide basic local indicators. They do not perform live threat-intelligence lookups, antivirus scans, or a complete security analysis. `Normal` means only that these limited checks found no warning; it does not confirm that an item is safe.
 
 ## Technology
 
@@ -49,7 +51,7 @@ To deploy updates, push changes to `master`. Render syncs the Blueprint and rede
 - Password changes and administrator resets invalidate existing login sessions for that account.
 - User scan history is scoped to the signed-in account. Admin pages are protected on the Flask server.
 - Responses include browser security headers, and signed-in pages are marked not to be cached.
-- Uploaded files are checked in memory and are not saved or executed. The file name and result are stored in account history.
+- Uploaded files are checked in memory and are not saved or executed. Their name, hash, type, size, and findings are stored in account history. Pasted log text is not stored; only summarized counts and findings are saved.
 - `.env`, `.venv/`, and `instance/` are excluded from Git.
 
 ## Configuration

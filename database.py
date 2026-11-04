@@ -75,6 +75,7 @@ def init_db(app):
                 target TEXT NOT NULL,
                 risk TEXT NOT NULL,
                 summary TEXT NOT NULL DEFAULT '',
+                analysis_details TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             """
@@ -82,4 +83,7 @@ def init_db(app):
         scan_columns = {row["name"] for row in get_db().execute("PRAGMA table_info(scans)").fetchall()}
         if "user_hidden_at" not in scan_columns:
             get_db().execute("ALTER TABLE scans ADD COLUMN user_hidden_at TEXT")
+            get_db().commit()
+        if "analysis_details" not in scan_columns:
+            get_db().execute("ALTER TABLE scans ADD COLUMN analysis_details TEXT NOT NULL DEFAULT '{}'")
             get_db().commit()

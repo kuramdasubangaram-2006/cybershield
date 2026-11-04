@@ -1,0 +1,46 @@
+{% extends "dashboard_base.html" %}
+{% block content %}
+  <section class="welcome-row">
+    <div><p class="eyebrow">SCAN DETAIL</p><h2>{{ scan.module }}</h2><p>{% if admin_view %}Scan submitted by {{ scan.email }}.{% else %}Detailed view of your saved scan.{% endif %}</p></div>
+    <span class="risk-pill risk-{{ scan.risk|risk_level|lower }}">{{ scan.risk|risk_level }}</span>
+  </section>
+
+  <section class="content-panel">
+    <div class="panel-heading"><div><h3>What was reviewed</h3><p>{{ scan.created_at|ist_datetime }} IST</p></div></div>
+    <p class="result-target">{{ scan.target }}</p>
+    <p class="result-summary">{{ scan.summary }}</p>
+    <p class="role-note left-note">
+      {% if scan.module == 'IP Detection' %}Address format and network range were checked locally; the IP was not contacted and no reputation lookup was made.
+      {% elif scan.module == 'URL Scanner' %}URL structure was checked locally; the website was not opened or contacted.
+      {% elif scan.module == 'File Analyzer' %}A short file signature and metadata were checked in memory; the file was not saved, executed, or antivirus-scanned.
+      {% elif scan.module == 'Log Analysis' %}Common keyword patterns were counted; the original pasted log text was not saved.
+      {% endif %}
+    </p>
+    <div class="scan-detail-facts">
+      <div><span>Risk level</span><strong>{{ scan.risk|risk_level }}</strong></div>
+      {% if details.facts %}{% for label, value in details.facts.items() %}<div><span>{{ label }}</span><strong>{{ value }}</strong></div>{% endfor %}{% endif %}
+      {% if details.sha256 %}<div><span>SHA-256</span><strong>{{ details.sha256 }}</strong></div>{% endif %}
+    </div>
+  </section>
+
+  {% if details.indicators %}
+    <section class="content-panel">
+      <div class="panel-heading"><div><h3>Why this result was assigned</h3><p>These are the indicators matched by CyberShield's local checks.</p></div></div>
+      <ul class="detail-list">{% for item in details.indicators %}<li>{{ item }}</li>{% endfor %}</ul>
+    </section>
+  {% endif %}
+
+  {% if details.recommendations %}
+    <section class="content-panel">
+      <div class="panel-heading"><div><h3>Suggested next steps</h3><p>Use these as review guidance and check activity in context.</p></div></div>
+      <ul class="detail-list">{% for item in details.recommendations %}<li>{{ item }}</li>{% endfor %}</ul>
+    </section>
+  {% endif %}
+
+  {% if not details.indicators and not details.facts %}
+    <section class="content-panel"><div class="empty-state"><strong>Detailed findings are not available for this older scan</strong><p>New scans save structured local findings. Original uploaded files and pasted log text are not retained.</p></div></section>
+  {% endif %}
+
+  <section class="scanner-disclaimer"><strong>Important:</strong> Normal means no warning was found in the checks performed; it does not prove an item is safe. CyberShield does not run antivirus or live threat-intelligence checks.</section>
+  <div><a class="primary-link" href="{{ url_for('alerts_history') }}">← Back to Alerts &amp; History</a></div>
+{% endblock %}

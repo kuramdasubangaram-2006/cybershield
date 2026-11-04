@@ -15,40 +15,48 @@ def analyze_ip(value):
 
     if address.is_loopback:
         label = "Loopback address"
-        risk = "Informational"
+        risk = "Normal"
         summary = "This address points back to the same device; it is not a public reputation result."
         indicators = ["The address is reserved for the local device."]
+        recommendations = ["Confirm that a local-device address is what you intended to review."]
     elif address.is_link_local:
         label = "Link-local address"
-        risk = "Informational"
+        risk = "Normal"
         summary = "This address is used on a local network and is not globally reachable."
         indicators = ["The address is link-local."]
+        recommendations = ["Compare the address with the expected local network range."]
     elif address.is_private:
         label = "Private network address"
-        risk = "Informational"
+        risk = "Normal"
         summary = "This address belongs to a private network; its public threat reputation cannot be checked here."
         indicators = ["The address is not globally routable."]
+        recommendations = ["Compare the address with the expected private network range."]
     elif address.is_multicast or address.is_unspecified or address.is_reserved:
         label = "Special-purpose address"
-        risk = "Review"
+        risk = "Low"
         summary = "This is a special-purpose address, not a normal public host reputation result."
         indicators = ["The address is reserved for a special networking purpose."]
+        recommendations = ["Confirm this special-purpose address is expected in your network context."]
     elif address.is_global:
         label = "Public IP — reputation unverified"
-        risk = "Unverified"
+        risk = "Normal"
         summary = "The address is globally routable. No threat-intelligence source is connected, so its reputation is unknown."
         indicators = ["Local format and address-range checks only; no live reputation lookup was performed."]
+        recommendations = ["Check an approved threat-intelligence source before trusting this public address."]
     else:
         label = "Non-public address"
-        risk = "Informational"
+        risk = "Normal"
         summary = "This address is not globally routable. No public threat reputation was checked."
         indicators = ["The address is outside the public global address space."]
+        recommendations = ["Compare the address with the expected network range; no public reputation check was performed."]
 
     return {
         "label": label,
         "risk": risk,
         "summary": summary,
         "indicators": indicators,
+        "recommendations": recommendations,
+        "facts": {"IP version": f"IPv{address.version}", "Globally routable": "Yes" if address.is_global else "No"},
         "target": str(address),
     }
 
@@ -84,11 +92,13 @@ def analyze_url(value):
     if parsed.username is not None or parsed.password is not None:
         strong_indicators.append("The URL contains user information before the hostname.")
 
+    host_is_ip = False
     try:
         ipaddress.ip_address(host)
     except ValueError:
         pass
     else:
+        host_is_ip = True
         strong_indicators.append("The hostname is an IP address instead of a domain name.")
 
     hostname_labels = host.rstrip(".").lower().split(".")
@@ -106,21 +116,33 @@ def analyze_url(value):
         label = "Structural warning"
         risk = "High"
         summary = "Potentially deceptive URL structure found. Do not open it until it has been reviewed."
+        recommendations = ["Do not open the URL or enter credentials. Verify the complete hostname with the expected organization through a trusted channel."]
     elif caution_indicators:
         label = "Needs review"
-        risk = "Review"
+        risk = "Low"
         summary = "Some structural caution signs were found. No live threat-reputation check was performed."
+        recommendations = ["Check the hostname and scheme carefully. Avoid entering passwords until you confirm the destination."]
     else:
         label = "No obvious structural warning — unverified"
-        risk = "Unverified"
+        risk = "Normal"
         summary = "No obvious structural warning was found. This does not confirm that the URL is safe."
         indicators.append("No live threat-intelligence lookup was performed.")
+        recommendations = ["Confirm the website address independently before signing in or sharing sensitive information."]
 
     return {
         "label": label,
         "risk": risk,
         "summary": summary,
         "indicators": indicators,
+        "recommendations": recommendations,
+        "facts": {
+            "Hostname": host,
+            "Scheme": parsed.scheme.lower(),
+            "HTTPS": "Yes" if parsed.scheme.lower() == "https" else "No",
+            "Host is an IP address": "Yes" if host_is_ip else "No",
+            "Subdomain levels": str(max(0, len(hostname_labels) - 2)),
+            "URL length": f"{len(raw_url)} characters",
+        },
         "target": raw_url,
     }
 
@@ -183,11 +205,23 @@ def analyze_file(filename, content):
         indicators.append("Only the file name, size, SHA-256 hash, and a short file signature were checked.")
 
     caution = any("executable" in item.lower() or "script" in item.lower() or "does not match" in item.lower() for item in indicators)
+    strong_caution = any("multiple extensions" in item.lower() for item in indicators) or (
+        expected_type and expected_type != detected_type
+        and (expected_type in executable_types or detected_type in executable_types)
+    )
+    risk = "High" if strong_caution else "Low" if caution else "Normal"
+    recommendations = (
+        ["Do not run this file. Verify where it came from and check it with trusted endpoint-security software."]
+        if caution else
+        ["No warning was found in the limited checks. Use trusted endpoint-security software before opening an unknown file."]
+    )
     return {
-        "label": "File needs review" if caution else "Basic file checks — unverified",
-        "risk": "Review" if caution else "Unverified",
+        "label": "File needs review" if caution else "Basic file checks — no warning found",
+        "risk": risk,
         "summary": "Basic metadata and file-signature checks only. No antivirus scan was performed, so this file is not confirmed safe.",
         "indicators": indicators,
+        "recommendations": recommendations,
+        "facts": {"Detected type": detected_type, "File size": f"{size} bytes", "Extension": suffix or "None"},
         "target": name,
         "file_type": detected_type,
         "size": size,
@@ -241,15 +275,29 @@ def analyze_logs(value):
     if not indicators:
         indicators.append("No configured keyword patterns matched; this does not prove the log is clean.")
     any_match = any(counts.values())
+    if failed >= 10:
+        recommendations = ["Review the source addresses and times, confirm whether the attempts were expected, and secure affected accounts if they were not."]
+    elif needs_review:
+        recommendations = ["Review the matching log entries in context and confirm that the account or privileged activity was expected."]
+    else:
+        recommendations = ["No configured warning keywords matched. Compare with other system logs; this does not prove the system is safe."]
     return {
         "label": (
             "Log activity needs review" if needs_review
-            else "Log patterns found — unverified" if any_match
-            else "No matching patterns — unverified"
+            else "Log patterns found — no high-priority indicator" if any_match
+            else "No matching patterns — no warning found"
         ),
-        "risk": "Review" if needs_review else "Unverified",
+        "risk": "High" if failed >= 10 else "Low" if needs_review else "Normal",
         "summary": f"Basic keyword checks reviewed {len(lines)} non-empty log line(s). This is not a complete security analysis.",
         "indicators": indicators,
+        "recommendations": recommendations,
+        "facts": {
+            "Lines reviewed": str(len(lines)),
+            "Authentication failures": str(failed),
+            "Successful login phrases": str(counts["successful_logins"]),
+            "Privileged command phrases": str(counts["privileged_events"]),
+            "Account change phrases": str(counts["account_changes"]),
+        },
         "target": f"Pasted log sample ({len(lines)} lines)",
         "line_count": len(lines),
         "counts": counts,

@@ -20,11 +20,14 @@ CREATE TABLE IF NOT EXISTS public.scans (
     risk TEXT NOT NULL,
     summary TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    user_hidden_at TIMESTAMPTZ
+    user_hidden_at TIMESTAMPTZ,
+    analysis_details TEXT NOT NULL DEFAULT '{}'
 );
 
 ALTER TABLE public.scans
     ADD COLUMN IF NOT EXISTS user_hidden_at TIMESTAMPTZ;
+ALTER TABLE public.scans
+    ADD COLUMN IF NOT EXISTS analysis_details TEXT NOT NULL DEFAULT '{}';
 
 CREATE INDEX IF NOT EXISTS scans_user_created_idx
     ON public.scans (user_id, created_at DESC);

@@ -5,6 +5,7 @@ import csv
 import hashlib
 import hmac
 import io
+import json
 import os
 import secrets
 from datetime import datetime, timezone, timedelta
@@ -35,6 +36,28 @@ load_dotenv()
 INDIA_TIMEZONE = timezone(timedelta(hours=5, minutes=30), name="IST")
 
 
+def risk_level(value):
+    """Normalize current and older stored labels to the four-level display scale."""
+    return {
+        "informational": "Normal",
+        "unverified": "Normal",
+        "review": "Low",
+        "normal": "Normal",
+        "low": "Low",
+        "high": "High",
+        "critical": "Critical",
+    }.get(str(value).lower(), str(value).title())
+
+
+def persisted_analysis_details(result):
+    """Keep derived findings only; never persist uploaded bytes or pasted log text."""
+    allowed = {
+        "label", "indicators", "recommendations", "facts", "line_count", "counts",
+        "file_type", "size", "sha256",
+    }
+    return {key: value for key, value in result.items() if key in allowed}
+
+
 def create_app():
     app = Flask(__name__, instance_relative_config=True)
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
@@ -51,6 +74,7 @@ def create_app():
     app.teardown_appcontext(close_db)
     init_db(app)
     app.jinja_env.filters["ist_datetime"] = ist_datetime
+    app.jinja_env.filters["risk_level"] = risk_level
 
     @app.after_request
     def add_security_headers(response):
@@ -216,7 +240,7 @@ def create_app():
             (user_id,),
         ).fetchone()["count"]
         recent_scans = db.execute(
-            "SELECT module, target, risk, created_at FROM scans "
+            "SELECT id, module, target, risk, created_at FROM scans "
             "WHERE user_id = ? AND user_hidden_at IS NULL ORDER BY id DESC LIMIT 5",
             (user_id,),
         ).fetchall()
@@ -238,7 +262,7 @@ def create_app():
             "SELECT COUNT(*) AS count FROM scans WHERE lower(risk) IN ('high', 'critical')"
         ).fetchone()["count"]
         recent_scans = db.execute(
-            "SELECT scans.module, scans.target, scans.risk, scans.created_at, users.email "
+            "SELECT scans.id, scans.module, scans.target, scans.risk, scans.created_at, users.email "
             "FROM scans JOIN users ON users.id = scans.user_id ORDER BY scans.id DESC LIMIT 8"
         ).fetchall()
         return render_template(
@@ -293,11 +317,14 @@ def create_app():
                         flash(str(error), "error")
                     else:
                         db = get_db()
-                        db.execute(
-                            "INSERT INTO scans (user_id, module, target, risk, summary) VALUES (?, ?, ?, ?, ?)",
-                            (get_current_user()["id"], "File Analyzer", result["target"], result["risk"], result["summary"]),
+                        scan_cursor = db.execute(
+                            "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
+                            "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+                            (get_current_user()["id"], "File Analyzer", result["target"], result["risk"],
+                             result["summary"], json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
                         )
                         db.commit()
+                        result["scan_id"] = scan_cursor.fetchone()["id"]
 
         return render_template("file_analyzer.html", page_title="File Analyzer", result=result)
 
@@ -316,11 +343,14 @@ def create_app():
                 flash(str(error), "error")
             else:
                 db = get_db()
-                db.execute(
-                    "INSERT INTO scans (user_id, module, target, risk, summary) VALUES (?, ?, ?, ?, ?)",
-                    (get_current_user()["id"], "Log Analysis", result["target"], result["risk"], result["summary"]),
+                scan_cursor = db.execute(
+                    "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
+                    "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+                    (get_current_user()["id"], "Log Analysis", result["target"], result["risk"],
+                     result["summary"], json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
                 )
                 db.commit()
+                result["scan_id"] = scan_cursor.fetchone()["id"]
                 submitted_text = ""
 
         return render_template(
@@ -336,17 +366,17 @@ def create_app():
         user = get_current_user()
         if user["role"] == "admin":
             scans = get_db().execute(
-                "SELECT scans.module, scans.target, scans.risk, scans.summary, scans.created_at, users.email, "
+                "SELECT scans.id, scans.module, scans.target, scans.risk, scans.summary, scans.created_at, users.email, "
                 "scans.user_hidden_at "
                 "FROM scans JOIN users ON users.id = scans.user_id ORDER BY scans.id DESC"
             ).fetchall()
         else:
             scans = get_db().execute(
-                "SELECT module, target, risk, summary, created_at "
+                "SELECT id, module, target, risk, summary, created_at "
                 "FROM scans WHERE user_id = ? AND user_hidden_at IS NULL ORDER BY id DESC",
                 (user["id"],),
             ).fetchall()
-        review_items = [scan for scan in scans if scan["risk"].lower() in {"review", "high", "critical"}]
+        review_items = [scan for scan in scans if risk_level(scan["risk"]) in {"Low", "High", "Critical"}]
         return render_template(
             "alerts_history.html",
             page_title="Alerts & History",
@@ -374,6 +404,33 @@ def create_app():
         count = cursor.rowcount
         flash(f"Hid {count} scan record(s) from your account history. Admins can still view them.", "success")
         return redirect(url_for("alerts_history"))
+
+    @app.get("/scans/<int:scan_id>")
+    @login_required
+    def scan_detail(scan_id):
+        viewer = get_current_user()
+        scan = get_db().execute(
+            "SELECT scans.id, scans.user_id, scans.module, scans.target, scans.risk, scans.summary, "
+            "scans.created_at, scans.user_hidden_at, scans.analysis_details, users.email "
+            "FROM scans JOIN users ON users.id = scans.user_id WHERE scans.id = ?",
+            (scan_id,),
+        ).fetchone()
+        if scan is None or (viewer["role"] != "admin" and (
+            scan["user_id"] != viewer["id"] or scan["user_hidden_at"] is not None
+        )):
+            abort(404)
+        details_value = scan["analysis_details"] or "{}"
+        try:
+            details = json.loads(details_value) if isinstance(details_value, str) else details_value
+        except (TypeError, json.JSONDecodeError):
+            details = {}
+        return render_template(
+            "scan_detail.html",
+            page_title="Scan details",
+            scan=scan,
+            details=details if isinstance(details, dict) else {},
+            admin_view=viewer["role"] == "admin",
+        )
 
     @app.post("/admin/history/clear-users")
     @admin_required
@@ -424,15 +481,16 @@ def create_app():
         module_counts = {}
         for scan in scans:
             module_counts[scan["module"]] = module_counts.get(scan["module"], 0) + 1
-        review_count = sum(scan["risk"].lower() in {"review", "high", "critical"} for scan in scans)
-        unverified_count = sum(scan["risk"].lower() == "unverified" for scan in scans)
+        risk_counts = {
+            level: sum(risk_level(scan["risk"]) == level for scan in scans)
+            for level in ("Normal", "Low", "High", "Critical")
+        }
         return render_template(
             "reports.html",
             page_title="Reports",
             scans=scans,
             module_counts=module_counts,
-            review_count=review_count,
-            unverified_count=unverified_count,
+            risk_counts=risk_counts,
             admin_view=user["role"] == "admin",
         )
 
@@ -460,7 +518,7 @@ def create_app():
         writer.writerow(headers)
         for scan in scans:
             values = ([scan["email"]] if is_admin else []) + [
-                scan["module"], scan["target"], scan["risk"], scan["summary"], ist_datetime(scan["created_at"])
+                scan["module"], scan["target"], risk_level(scan["risk"]), scan["summary"], ist_datetime(scan["created_at"])
             ]
             writer.writerow([safe_csv_cell(value) for value in values])
         report = io.BytesIO(output.getvalue().encode("utf-8-sig"))
@@ -647,11 +705,14 @@ def run_scan_page(module, page_title, description, analyzer):
             flash(str(error), "error")
         else:
             db = get_db()
-            db.execute(
-                "INSERT INTO scans (user_id, module, target, risk, summary) VALUES (?, ?, ?, ?, ?)",
-                (user["id"], module, result["target"], result["risk"], result["summary"]),
+            scan_cursor = db.execute(
+                "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
+                "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+                (user["id"], module, result["target"], result["risk"], result["summary"],
+                 json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
             )
             db.commit()
+            result["scan_id"] = scan_cursor.fetchone()["id"]
 
     return render_template(
         "scanner.html",

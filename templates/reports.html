@@ -5,10 +5,12 @@
     <a class="primary-link" href="{{ url_for('download_report') }}">Download CSV <span aria-hidden="true">↓</span></a>
   </section>
 
-  <section class="metric-grid">
+  <section class="metric-grid report-risk-grid">
     <article class="metric-card"><span class="metric-icon cyan">▤</span><p>Total scans</p><strong>{{ scans|length }}</strong><small>Included in this report</small></article>
-    <article class="metric-card"><span class="metric-icon amber">!</span><p>Items for review</p><strong>{{ review_count }}</strong><small>Review, High, or Critical</small></article>
-    <article class="metric-card"><span class="metric-icon blue">?</span><p>Unverified</p><strong>{{ unverified_count }}</strong><small>Unknown reputation or result</small></article>
+    <article class="metric-card"><span class="metric-icon green">✓</span><p>Normal</p><strong>{{ risk_counts.Normal }}</strong><small>No local warning found; not a safety verdict</small></article>
+    <article class="metric-card"><span class="metric-icon blue">!</span><p>Low</p><strong>{{ risk_counts.Low }}</strong><small>Minor indicators need review</small></article>
+    <article class="metric-card"><span class="metric-icon amber">▲</span><p>High</p><strong>{{ risk_counts.High }}</strong><small>Strong warning indicators found</small></article>
+    <article class="metric-card"><span class="metric-icon amber">‼</span><p>Critical</p><strong>{{ risk_counts.Critical }}</strong><small>Reserved for confirmed severe findings</small></article>
   </section>
 
   <section class="content-panel">
