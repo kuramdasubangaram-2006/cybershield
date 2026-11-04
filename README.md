@@ -13,6 +13,9 @@ CyberShield is a Flask web app for basic security checks, account management, an
 - Basic keyword checks for pasted log text.
 - Scan history, alerts, and downloadable reports.
 - Saved scans open a detailed view with local indicators, checked facts, and suggested next steps.
+- Scan detail pages can be downloaded as a single-scan PDF report.
+- Scan submissions are limited to five per account per UTC minute window.
+- Administrators can review a private activity log for successful sign-ins, account changes, scan-history clearing, and report exports.
 - Risk labels are Normal, Low, High, and Critical. Critical is reserved for strong confirmed evidence and is not currently assigned by local-only checks.
 
 These tools provide basic local indicators. They do not perform live threat-intelligence lookups, antivirus scans, or a complete security analysis. `Normal` means only that these limited checks found no warning; it does not confirm that an item is safe.
@@ -39,6 +42,8 @@ Open `http://127.0.0.1:5000/`. If the selected database has no administrator acc
 
 By default, local development uses SQLite in `instance/cybershield.sqlite3`. To use Supabase locally, set `DATABASE_URL` in `.env` to the PostgreSQL connection string and apply `supabase_schema.sql` in the Supabase SQL Editor first. Keep `.env` private; it is excluded by `.gitignore`.
 
+For an existing hosted CyberShield Supabase database, run `supabase_app_controls.sql` once in the SQL Editor before deploying updates. It creates the private admin activity and scan-limit tables.
+
 ## Hosted deployment
 
 The live app is deployed from the `master` branch of the public GitHub repository through the root `render.yaml` Blueprint. Render stores `DATABASE_URL` as a secret environment variable; the app uses Supabase PostgreSQL for durable account and scan data.
@@ -49,6 +54,8 @@ To deploy updates, push changes to `master`. Render syncs the Blueprint and rede
 
 - Passwords are stored as hashes, not plain text.
 - Password changes and administrator resets invalidate existing login sessions for that account.
+- The administrator activity log records administrator actions but never stores passwords or password values.
+- Scan limits are counted per signed-in account; temporary rate-limit counters older than one day are removed during scan requests.
 - User scan history is scoped to the signed-in account. Admin pages are protected on the Flask server.
 - Responses include browser security headers, and signed-in pages are marked not to be cached.
 - Uploaded files are checked in memory and are not saved or executed. Their name, hash, type, size, and findings are stored in account history. Pasted log text is not stored; only summarized counts and findings are saved.

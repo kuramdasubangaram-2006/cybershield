@@ -4,6 +4,7 @@
     <div><p class="eyebrow">SCAN DETAIL</p><h2>{{ scan.module }}</h2><p>{% if admin_view %}Scan submitted by {{ scan.email }}.{% else %}Detailed view of your saved scan.{% endif %}</p></div>
     <span class="risk-pill risk-{{ scan.risk|risk_level|lower }}">{{ scan.risk|risk_level }}</span>
   </section>
+  <div class="detail-action-row"><a class="primary-link" href="{{ url_for('download_scan_pdf', scan_id=scan.id) }}">Download PDF report <span aria-hidden="true">↓</span></a></div>
 
   {% if details.site_explanation %}
     <section class="content-panel">

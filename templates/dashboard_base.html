@@ -20,6 +20,7 @@
           {% if current_user.role == 'admin' %}
             <a class="side-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}"><span>▦</span> Overview</a>
             <a class="side-link {% if request.endpoint == 'manage_users' %}active{% endif %}" href="{{ url_for('manage_users') }}"><span>♙</span> Users</a>
+            <a class="side-link {% if request.endpoint == 'admin_activity' %}active{% endif %}" href="{{ url_for('admin_activity') }}"><span>◷</span> Admin Activity</a>
           {% else %}
             <a class="side-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}"><span>▦</span> My dashboard</a>
           {% endif %}

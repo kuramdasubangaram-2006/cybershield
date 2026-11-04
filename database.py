@@ -78,6 +78,22 @@ def init_db(app):
                 analysis_details TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS admin_activity (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                actor_email TEXT NOT NULL,
+                action TEXT NOT NULL,
+                target TEXT NOT NULL DEFAULT '',
+                details TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS scan_rate_limits (
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                window_start TEXT NOT NULL,
+                request_count INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (user_id, window_start)
+            );
             """
         )
         scan_columns = {row["name"] for row in get_db().execute("PRAGMA table_info(scans)").fetchall()}

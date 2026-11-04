@@ -32,6 +32,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from database import INTEGRITY_ERRORS, close_db, get_db, init_db
 from detectors import analyze_file, analyze_ip, analyze_logs, analyze_url
 from site_inspector import inspect_public_site
+from pdf_reports import build_scan_pdf
 
 
 load_dotenv()
@@ -164,6 +165,8 @@ def create_app():
                     "INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin') RETURNING id",
                     (email, password_hash),
                 )
+                record_admin_activity("Administrator account created", email, commit=False,
+                                      actor={"email": email, "role": "admin"})
                 db.commit()
                 session.clear()
                 session["user_id"] = cursor.fetchone()["id"]
@@ -196,6 +199,8 @@ def create_app():
                 session.clear()
                 session["user_id"] = user["id"]
                 session["password_token"] = make_password_token(user["password_hash"])
+                if user["role"] == "admin":
+                    record_admin_activity("Administrator signed in", user["email"], actor=user)
                 session.permanent = "remember" in request.form
                 return redirect(url_for("dashboard"))
 
@@ -205,6 +210,9 @@ def create_app():
     def logout():
         if not validate_csrf():
             abort(400)
+        user = get_current_user()
+        if user and user["role"] == "admin":
+            record_admin_activity("Administrator signed out", user["email"])
         session.clear()
         return redirect(url_for("login"))
 
@@ -239,6 +247,8 @@ def create_app():
                     "UPDATE users SET password_hash = ? WHERE id = ?",
                     (new_hash, user["id"]),
                 )
+                record_admin_activity("Changed administrator password", user["email"],
+                                      "Password value was not recorded.", commit=False)
                 db.commit()
                 was_permanent = session.permanent
                 session.clear()
@@ -302,6 +312,19 @@ def create_app():
             recent_scans=recent_scans,
         )
 
+    @app.get("/admin/activity")
+    @admin_required
+    def admin_activity():
+        events = get_db().execute(
+            "SELECT actor_email, action, target, details, created_at "
+            "FROM admin_activity ORDER BY id DESC LIMIT 200"
+        ).fetchall()
+        return render_template(
+            "admin_activity.html",
+            page_title="Admin Activity Log",
+            events=events,
+        )
+
     @app.route("/tools/ip", methods=["GET", "POST"])
     @login_required
     def scan_ip():
@@ -326,12 +349,16 @@ def create_app():
     @login_required
     def analyze_uploaded_file():
         result = None
+        rate_limited = False
         if request.method == "POST":
             if not validate_csrf():
                 abort(400)
             uploaded = request.files.get("file")
             if uploaded is None or not uploaded.filename:
                 flash("Choose a file to analyze.", "error")
+            elif scan_rate_limited(get_current_user()["id"]):
+                rate_limited = True
+                flash("Scan limit reached. Please wait until the next minute before scanning again.", "error")
             else:
                 content = uploaded.stream.read(5 * 1024 * 1024 + 1)
                 if len(content) > 5 * 1024 * 1024:
@@ -354,39 +381,45 @@ def create_app():
                         db.commit()
                         result["scan_id"] = scan_cursor.fetchone()["id"]
 
-        return render_template("file_analyzer.html", page_title="File Analyzer", result=result)
+        return render_template("file_analyzer.html", page_title="File Analyzer", result=result), 429 if rate_limited else 200
 
     @app.route("/tools/logs", methods=["GET", "POST"])
     @login_required
     def analyze_log_text():
         result = None
         submitted_text = ""
+        rate_limited = False
         if request.method == "POST":
             if not validate_csrf():
                 abort(400)
             submitted_text = request.form.get("log_text", "")
-            try:
-                result = analyze_logs(submitted_text)
-            except ValueError as error:
-                flash(str(error), "error")
-            else:
-                db = get_db()
-                scan_cursor = db.execute(
-                    "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
-                    "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-                    (get_current_user()["id"], "Log Analysis", result["target"], result["risk"],
-                     result["summary"], json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
-                )
-                db.commit()
-                result["scan_id"] = scan_cursor.fetchone()["id"]
+            if submitted_text.strip() and scan_rate_limited(get_current_user()["id"]):
+                rate_limited = True
                 submitted_text = ""
+                flash("Scan limit reached. Please wait until the next minute before scanning again.", "error")
+            else:
+                try:
+                    result = analyze_logs(submitted_text)
+                except ValueError as error:
+                    flash(str(error), "error")
+                else:
+                    db = get_db()
+                    scan_cursor = db.execute(
+                        "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
+                        "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+                        (get_current_user()["id"], "Log Analysis", result["target"], result["risk"],
+                         result["summary"], json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
+                    )
+                    db.commit()
+                    result["scan_id"] = scan_cursor.fetchone()["id"]
+                    submitted_text = ""
 
         return render_template(
             "log_analysis.html",
             page_title="Log Analysis",
             result=result,
             submitted_text=submitted_text,
-        )
+        ), 429 if rate_limited else 200
 
     @app.get("/alerts-history")
     @login_required
@@ -460,6 +493,37 @@ def create_app():
             admin_view=viewer["role"] == "admin",
         )
 
+    @app.get("/scans/<int:scan_id>/report.pdf")
+    @login_required
+    def download_scan_pdf(scan_id):
+        viewer = get_current_user()
+        scan = get_db().execute(
+            "SELECT scans.id, scans.user_id, scans.module, scans.target, scans.risk, scans.summary, "
+            "scans.created_at, scans.user_hidden_at, scans.analysis_details, users.email "
+            "FROM scans JOIN users ON users.id = scans.user_id WHERE scans.id = ?",
+            (scan_id,),
+        ).fetchone()
+        if scan is None or (viewer["role"] != "admin" and (
+            scan["user_id"] != viewer["id"] or scan["user_hidden_at"] is not None
+        )):
+            abort(404)
+        details_value = scan["analysis_details"] or "{}"
+        try:
+            details = json.loads(details_value) if isinstance(details_value, str) else details_value
+        except (TypeError, json.JSONDecodeError):
+            details = {}
+        if not isinstance(details, dict):
+            details = {}
+        if viewer["role"] == "admin":
+            record_admin_activity("Downloaded scan PDF", f"Scan #{scan_id}", f"Account: {scan['email']}")
+        report = build_scan_pdf(scan, details, risk_level(scan["risk"]), ist_datetime(scan["created_at"]))
+        return send_file(
+            report,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"cybershield-scan-{scan_id}.pdf",
+        )
+
     @app.post("/admin/history/clear-users")
     @admin_required
     def clear_user_scans():
@@ -470,8 +534,9 @@ def create_app():
             "DELETE FROM scans WHERE user_id IN "
             "(SELECT id FROM users WHERE role = 'user')"
         )
-        db.commit()
         count = cursor.rowcount
+        record_admin_activity("Cleared User scans", "All User accounts", f"Deleted {count} scan record(s).", commit=False)
+        db.commit()
         flash(f"Cleared {count} scan record(s) from all User accounts.", "success")
         return redirect(url_for("alerts_history"))
 
@@ -485,8 +550,9 @@ def create_app():
             "DELETE FROM scans WHERE user_id IN "
             "(SELECT id FROM users WHERE role = 'admin')"
         )
-        db.commit()
         count = cursor.rowcount
+        record_admin_activity("Cleared Admin scans", "All Admin accounts", f"Deleted {count} scan record(s).", commit=False)
+        db.commit()
         flash(f"Cleared {count} scan record(s) from Admin accounts.", "success")
         return redirect(url_for("alerts_history"))
 
@@ -551,6 +617,8 @@ def create_app():
             writer.writerow([safe_csv_cell(value) for value in values])
         report = io.BytesIO(output.getvalue().encode("utf-8-sig"))
         report.seek(0)
+        if is_admin:
+            record_admin_activity("Downloaded workspace CSV report", "All accounts", f"Exported {len(scans)} scan record(s).")
         filename = f"cybershield-report-{datetime.now(INDIA_TIMEZONE):%Y%m%d-%H%M%S}.csv"
         return send_file(report, mimetype="text/csv; charset=utf-8", as_attachment=True, download_name=filename)
 
@@ -574,6 +642,7 @@ def create_app():
                         "INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'user')",
                         (email, generate_password_hash(password)),
                     )
+                    record_admin_activity("Created User account", email, commit=False)
                     db.commit()
                 except INTEGRITY_ERRORS:
                     get_db().rollback()
@@ -615,6 +684,7 @@ def create_app():
                     "UPDATE users SET password_hash = ? WHERE id = ?",
                     (password_hash, account["id"]),
                 )
+                record_admin_activity("Reset User password", email, "Temporary password set; no password value was recorded.", commit=False)
                 db.commit()
                 flash("Temporary password reset. Share it privately and ask the user to change it after signing in.", "success")
         return redirect(url_for("manage_users"))
@@ -707,6 +777,40 @@ def safe_csv_cell(value):
     return text
 
 
+def record_admin_activity(action, target="", details="", commit=True, actor=None):
+    """Save an administrator action without recording credentials or secrets."""
+    actor = actor or get_current_user()
+    if actor is None or actor["role"] != "admin":
+        return
+    db = get_db()
+    db.execute(
+        "INSERT INTO admin_activity (actor_email, action, target, details) VALUES (?, ?, ?, ?)",
+        (actor["email"], action[:120], str(target)[:300], str(details)[:500]),
+    )
+    if commit:
+        db.commit()
+
+
+def scan_rate_limited(user_id):
+    """Allow five scan submissions per account in each UTC minute window."""
+    db = get_db()
+    now = datetime.now(timezone.utc)
+    window_start = now.replace(second=0, microsecond=0).isoformat(sep=" ", timespec="seconds")
+    cursor = db.execute(
+        "INSERT INTO scan_rate_limits (user_id, window_start, request_count) VALUES (?, ?, 1) "
+        "ON CONFLICT (user_id, window_start) DO UPDATE "
+        "SET request_count = scan_rate_limits.request_count + 1 RETURNING request_count",
+        (user_id, window_start),
+    )
+    request_count = cursor.fetchone()["request_count"]
+    if current_app.config.get("DATABASE_URL"):
+        db.execute("DELETE FROM scan_rate_limits WHERE window_start < NOW() - INTERVAL '1 day'")
+    else:
+        db.execute("DELETE FROM scan_rate_limits WHERE datetime(window_start) < datetime('now', '-1 day')")
+    db.commit()
+    return request_count > 5
+
+
 def ist_datetime(value):
     """Format SQLite or PostgreSQL UTC timestamps as India Standard Time."""
     if not value:
@@ -722,25 +826,30 @@ def run_scan_page(module, page_title, description, analyzer):
     user = get_current_user()
     result = None
     submitted_value = ""
+    rate_limited = False
 
     if request.method == "POST":
         if not validate_csrf():
             abort(400)
         submitted_value = request.form.get("target", "").strip()
-        try:
-            result = analyzer(submitted_value)
-        except ValueError as error:
-            flash(str(error), "error")
+        if submitted_value and scan_rate_limited(user["id"]):
+            rate_limited = True
+            flash("Scan limit reached. Please wait until the next minute before scanning again.", "error")
         else:
-            db = get_db()
-            scan_cursor = db.execute(
-                "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
-                "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-                (user["id"], module, result["target"], result["risk"], result["summary"],
-                 json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
-            )
-            db.commit()
-            result["scan_id"] = scan_cursor.fetchone()["id"]
+            try:
+                result = analyzer(submitted_value)
+            except ValueError as error:
+                flash(str(error), "error")
+            else:
+                db = get_db()
+                scan_cursor = db.execute(
+                    "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
+                    "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+                    (user["id"], module, result["target"], result["risk"], result["summary"],
+                     json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
+                )
+                db.commit()
+                result["scan_id"] = scan_cursor.fetchone()["id"]
 
     return render_template(
         "scanner.html",
@@ -749,7 +858,7 @@ def run_scan_page(module, page_title, description, analyzer):
         description=description,
         result=result,
         submitted_value=submitted_value,
-    )
+    ), 429 if rate_limited else 200
 
 
 def login_required(view):
