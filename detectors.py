@@ -300,10 +300,22 @@ def analyze_logs(value):
         ),
     }
     counts = {name: sum(bool(pattern.search(line)) for line in lines) for name, pattern in patterns.items()}
+    # Broader, explainable local event groups. These count matching lines (a
+    # line may match more than one group); they are not vendor verdicts.
+    event_patterns = {
+        "malware_or_endpoint_alerts": re.compile(r"\b(?:malware|ransomware|trojan|virus|quarantin(?:e|ed)|endpoint detection|antivirus detection|threat detected)\b", re.IGNORECASE),
+        "network_or_firewall_blocks": re.compile(r"\b(?:firewall|blocked|denied|connection refused|port scan|scan detected|ids alert|ips alert)\b", re.IGNORECASE),
+        "web_or_application_attacks": re.compile(r"\b(?:sql injection|sqli|cross.site scripting|\bxss\b|path traversal|directory traversal|command injection|request smuggling|web attack)\b", re.IGNORECASE),
+        "suspicious_process_or_script": re.compile(r"\b(?:powershell|encodedcommand|base64|wscript|cscript|rundll32|regsvr32|scheduled task|cron job|process injection)\b", re.IGNORECASE),
+        "data_or_policy_events": re.compile(r"\b(?:data exfiltration|large upload|mass download|sensitive data|dlp|policy violation|unauthorized access|permission denied)\b", re.IGNORECASE),
+        "dns_or_domain_events": re.compile(r"\b(?:dns query|dns lookup|domain blocked|sinkhole|c2|command.and.control)\b", re.IGNORECASE),
+    }
+    event_categories = {name: sum(bool(pattern.search(line)) for line in lines) for name, pattern in event_patterns.items()}
     failure_pattern = patterns["authentication_failures"]
     success_pattern = patterns["successful_logins"]
     source_pattern = re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])")
     timestamp_pattern = re.compile(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?")
+    syslog_timestamp_pattern = re.compile(r"\b([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}:\d{2}:\d{2})\b")
     failure_sources = {}
     success_sources = {}
     timestamped_lines = 0
@@ -325,6 +337,19 @@ def analyze_logs(value):
                 timestamped_lines += 1
             except ValueError:
                 timestamp = None
+        else:
+            syslog_match = syslog_timestamp_pattern.search(line)
+            if syslog_match:
+                try:
+                    # Syslog timestamps omit the year and timezone. Use a
+                    # fixed leap year for within-sample time-window checks.
+                    timestamp = datetime.strptime(
+                        f"2000 {syslog_match.group(1)} {syslog_match.group(2)} {syslog_match.group(3)}",
+                        "%Y %b %d %H:%M:%S",
+                    )
+                    timestamped_lines += 1
+                except ValueError:
+                    timestamp = None
         event = (line_number, timestamp)
         if source and failure_pattern.search(line):
             failure_sources.setdefault(source, []).append(event)
@@ -378,15 +403,31 @@ def analyze_logs(value):
         indicators.append(f"Found {counts['privileged_events']} line(s) mentioning privileged commands; confirm they were expected.")
     if counts["account_changes"]:
         indicators.append(f"Found {counts['account_changes']} line(s) matching common account or group change wording.")
+    category_labels = {
+        "malware_or_endpoint_alerts": "malware or endpoint alerts",
+        "network_or_firewall_blocks": "network or firewall events",
+        "web_or_application_attacks": "web or application attack patterns",
+        "suspicious_process_or_script": "suspicious process or script wording",
+        "data_or_policy_events": "data or policy events",
+        "dns_or_domain_events": "DNS or domain events",
+    }
+    for name, count in event_categories.items():
+        if count:
+            indicators.append(f"Found {count} line(s) matching {category_labels[name]} wording. Review the original event details in your trusted log source.")
 
-    needs_review = bool(failed or counts["privileged_events"] or counts["account_changes"])
+    needs_review = bool(failed or counts["privileged_events"] or counts["account_changes"] or any(event_categories.values()))
     if not indicators:
         indicators.append("No configured keyword patterns matched; this does not prove the log is clean.")
     any_match = any(counts.values())
-    high_risk = failed >= 10 or bool(burst_failure_sources) or bool(failures_then_success)
+    high_risk = failed >= 10 or bool(burst_failure_sources) or bool(failures_then_success) or any(
+        event_categories[name] for name in ("malware_or_endpoint_alerts", "web_or_application_attacks", "data_or_policy_events")
+    )
     if high_risk:
-        recommendations = ["Review the correlated source and timestamps, verify whether the successful session was legitimate, and follow your organization's incident process if it was unexpected."]
-        explanation = "The log contains a stronger authentication pattern: a high number of failures, a short burst from one source, or a successful login after failures from that source. This is suspicious activity to investigate, not proof of compromise."
+        recommendations = ["Review the matching source events and timestamps in the original system, verify whether the activity was expected, and follow your organization's incident process if it was not."]
+        if any(event_categories[name] for name in ("malware_or_endpoint_alerts", "web_or_application_attacks", "data_or_policy_events")):
+            explanation = "One or more lines matched higher-priority malware, web-attack, or data-policy wording, or a stronger authentication pattern. Treat this as a lead to investigate in the original security tool; keyword matches alone do not confirm compromise."
+        else:
+            explanation = "The log contains a stronger authentication pattern: a high number of failures, a short burst from one source, or a successful login after failures from that source. This is suspicious activity to investigate, not proof of compromise."
     elif needs_review:
         recommendations = ["Review the matching log entries in context and confirm that the account or privileged activity was expected."]
         if failed and rapid_failure_sources:
@@ -405,7 +446,7 @@ def analyze_logs(value):
             else "No matching patterns — no warning found"
         ),
         "risk": "High" if high_risk else "Low" if needs_review else "Normal",
-        "summary": f"Reviewed {len(lines)} non-empty log line(s): {failed} authentication failure(s), {counts['successful_logins']} successful login phrase(s), {counts['privileged_events']} privileged-command phrase(s), and {counts['account_changes']} account-change phrase(s). This is a local pattern review, not a complete security analysis.",
+        "summary": f"Reviewed {len(lines)} non-empty log line(s) across authentication, privilege, account-change, malware, network, web-attack, process, data-policy, and DNS pattern groups. This is a local text-pattern review; matching wording is not proof of an attack.",
         "indicators": indicators,
         "explanation": explanation,
         "recommendations": recommendations,
@@ -420,8 +461,11 @@ def analyze_logs(value):
             "Sources with 2+ failures within 5 minutes": str(len(rapid_failure_sources)),
             "Failure sources followed by success": str(len(failures_then_success)),
             "Timestamped lines": str(timestamped_lines),
+            "Log format coverage": f"Recognized timestamps on {timestamped_lines} of {len(lines)} lines",
+            "Event category matches": str(sum(event_categories.values())),
         },
         "target": f"Pasted log sample ({len(lines)} lines)",
         "line_count": len(lines),
         "counts": {**counts, "distinct_failure_sources": len(failure_sources), "repeated_failure_sources": len(repeated_failure_sources), "rapid_failure_sources": len(rapid_failure_sources), "failures_then_success": len(failures_then_success), "timestamped_lines": timestamped_lines},
+        "event_categories": event_categories,
     }

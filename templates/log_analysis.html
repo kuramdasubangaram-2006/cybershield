@@ -36,6 +36,17 @@
         <div><span>Failure sources followed by success</span><strong>{{ result.counts.failures_then_success }}</strong></div>
         <div><span>Timestamped lines</span><strong>{{ result.counts.timestamped_lines }}</strong></div>
       </div>
+      {% if result.event_categories %}
+        <div class="indicator-block">
+          <h4>Deep event category review</h4>
+          <p>Counts show how many lines matched each local wording pattern. One line can match multiple categories; confirm every match in the source system.</p>
+          <div class="log-count-grid">
+            {% for category, count in result.event_categories.items() %}
+              <div><span>{{ category.replace('_', ' ')|title }}</span><strong>{{ count }}</strong></div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
       <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
       <div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>
     </section>

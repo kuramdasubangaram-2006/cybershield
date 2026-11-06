@@ -169,7 +169,7 @@ def persisted_analysis_details(result):
     """Keep derived findings only; never persist uploaded bytes or pasted log text."""
     allowed = {
         "label", "explanation", "site_explanation", "redirect_chain", "indicators", "recommendations",
-        "facts", "line_count", "counts", "file_type", "size", "sha256",
+        "facts", "line_count", "counts", "event_categories", "file_type", "size", "sha256",
     }
     return {key: value for key, value in result.items() if key in allowed}
 
