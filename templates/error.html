@@ -1,5 +1,5 @@
 <!doctype html>
 <html lang="en">
-  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ code }} | CyberShield</title><link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet"></head>
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ code }} | CyberShield KB</title><link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='favicon.png') }}"><link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}"><link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet"></head>
   <body class="login-page"><main class="error-card"><p class="eyebrow">CYBERSHIELD</p><h1>{{ code }}</h1><p>{{ message }}</p><a class="primary-link" href="{{ url_for('dashboard') }}">Back to my dashboard <span aria-hidden="true">→</span></a></main></body>
 </html>

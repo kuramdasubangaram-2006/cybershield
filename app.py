@@ -252,7 +252,7 @@ def create_app():
             return redirect(url_for("setup"))
         user = get_current_user()
         if user is None:
-            return redirect(url_for("login"))
+            return render_template("login.html", site_home=True)
         return redirect(url_for("dashboard"))
 
     @app.route("/setup", methods=["GET", "POST"])
