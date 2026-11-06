@@ -26,7 +26,7 @@
       {% if scan.module == 'IP Detection' %}Address format and network range were checked locally; the IP was not contacted and no reputation lookup was made.
       {% elif scan.module == 'URL Scanner' and details.site_explanation %}A limited read-only request gathered public page metadata; JavaScript was not run, forms were not submitted, and linked files were not fetched.
       {% elif scan.module == 'URL Scanner' %}URL structure was checked locally; this older scan did not gather live website details.
-      {% elif scan.module == 'File Analyzer' %}File metadata, a short signature, printable strings, and a few command or API-pattern combinations were checked in memory; the file was not saved, executed, or antivirus-scanned.
+      {% elif scan.module == 'File Analyzer' %}{{ details.analysis_scope or 'File metadata, signature, and printable strings were checked in memory; the file was not saved, executed, or antivirus-scanned.' }}
       {% elif scan.module == 'Log Analysis' %}Common event phrases, source totals, repeated authentication failures, and visible timestamps were summarized; the original pasted log text and individual source values were not saved.
       {% endif %}
     </p>
@@ -41,6 +41,13 @@
     <section class="content-panel">
       <div class="panel-heading"><div><h3>Why this result was assigned</h3><p>These are the indicators matched by CyberShield's local checks.</p></div></div>
       <ul class="detail-list">{% for item in details.indicators %}<li>{{ item }}</li>{% endfor %}</ul>
+    </section>
+  {% endif %}
+
+  {% if details.findings %}
+    <section class="content-panel">
+      <div class="panel-heading"><div><h3>Detailed static findings</h3><p>Pattern and structure indicators from the local file review.</p></div></div>
+      <ul class="detail-list">{% for finding in details.findings %}<li><strong>{{ finding.severity }} — {{ finding.name }}:</strong> {{ finding.detail }}</li>{% endfor %}</ul>
     </section>
   {% endif %}
 

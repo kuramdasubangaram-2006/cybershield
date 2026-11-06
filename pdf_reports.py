@@ -90,6 +90,13 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
         add_section("Detailed explanation", [details["explanation"]])
     if details.get("site_explanation"):
         add_section("Website response details", [details["site_explanation"]])
+    if details.get("analysis_scope"):
+        add_section("Analysis scope", [details["analysis_scope"]])
+    if details.get("findings"):
+        add_section("Detailed static findings", [
+            f"{item.get('severity', 'Review')} — {item.get('name', 'Finding')}: {item.get('detail', '')}"
+            for item in details["findings"] if isinstance(item, dict)
+        ])
 
     facts = details.get("facts") or {}
     if details.get("sha256"):

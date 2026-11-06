@@ -1,7 +1,7 @@
 {% extends "dashboard_base.html" %}
 {% block content %}
   <section class="welcome-row">
-    <div><p class="eyebrow">ANALYSIS TOOL</p><h2>File Analyzer</h2><p>Review file details, known signatures, printable strings, and a few common risky command or API combinations.</p></div>
+    <div><p class="eyebrow">ANALYSIS TOOL</p><h2>File Analyzer</h2><p>Review file structure, archive/document markers, executable metadata, printable strings, and suspicious content patterns.</p></div>
     <span class="panel-tag">LOCAL CHECKS ONLY</span>
   </section>
 
@@ -27,11 +27,15 @@
       <p class="result-target">{{ result.target }}</p>
       <p class="result-summary">{{ result.summary }}</p>
       <p class="result-summary">{{ result.explanation }}</p>
+      {% if result.analysis_scope %}<p class="scanner-privacy-note">{{ result.analysis_scope }}</p>{% endif %}
       <div class="file-facts">
         <div><span>Detected type</span><strong>{{ result.file_type }}</strong></div>
         <div><span>File size</span><strong>{{ result.size }} bytes</strong></div>
         <div class="hash-fact"><span>SHA-256</span><code>{{ result.sha256 }}</code></div>
       </div>
+      {% if result.findings %}
+        <div class="indicator-block"><h4>Detailed static findings</h4><ul>{% for finding in result.findings %}<li><strong>{{ finding.severity }} — {{ finding.name }}:</strong> {{ finding.detail }}</li>{% endfor %}</ul></div>
+      {% endif %}
       <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
       <div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>
     </section>

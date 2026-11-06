@@ -2,7 +2,11 @@
 
 import hashlib
 import ipaddress
+import io
+import math
 import re
+import zipfile
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import PurePath
 from urllib.parse import urlsplit
@@ -159,8 +163,79 @@ def analyze_url(value):
     }
 
 
+def _file_entropy(content):
+    size = len(content)
+    return -sum((count / size) * math.log2(count / size) for count in Counter(content).values())
+
+
+def _inspect_zip(content):
+    """Inspect bounded archive metadata and small XML members without extraction."""
+    details = {"Archive entries": "Unreadable", "Archive review cap": "100 members / 1 MB XML"}
+    indicators = []
+    findings = []
+    cautions = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            members = archive.infolist()
+            details["Archive entries"] = str(len(members))
+            sample = members[:100]
+            if len(members) > 100:
+                indicators.append("Archive member inspection was limited to the first 100 entries.")
+                cautions.append("Archive is larger than the member review limit.")
+            names = [item.filename for item in sample]
+            normalized = [name.replace("\\", "/") for name in names]
+            unsafe = [name for name in normalized if name.startswith("/") or re.match(r"^[A-Za-z]:", name) or ".." in name.split("/")]
+            if unsafe:
+                indicators.append(f"Found {len(unsafe)} archive path(s) using an absolute or parent-directory path. CyberShield did not extract them.")
+                findings.append({"name": "Unsafe archive paths", "detail": f"{len(unsafe)} member path(s) could escape the intended extraction folder.", "severity": "High"})
+            executable_suffixes = {".exe", ".dll", ".scr", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".jar"}
+            executable_members = [name for name in names if PurePath(name.lower()).suffix in executable_suffixes]
+            if executable_members:
+                indicators.append(f"Archive contains {len(executable_members)} executable or script file(s); none were run.")
+                findings.append({"name": "Executable content in archive", "detail": f"{len(executable_members)} executable/script member(s) found.", "severity": "Review"})
+            encrypted = sum(bool(item.flag_bits & 1) for item in sample)
+            if encrypted:
+                indicators.append(f"{encrypted} archive member(s) are encrypted and could not be inspected.")
+                cautions.append("Encrypted archive members were not inspected.")
+            high_ratio = [item for item in sample if item.file_size > 1_000_000 and item.file_size / max(item.compress_size, 1) > 1000]
+            if high_ratio:
+                indicators.append(f"{len(high_ratio)} archive member(s) have an unusually high compression ratio; content was not extracted.")
+                findings.append({"name": "High compression ratio", "detail": f"{len(high_ratio)} member(s) exceed the local review threshold.", "severity": "Review"})
+            lower_names = [name.lower() for name in names]
+            document_type = next((kind for marker, kind in (("word/document.xml", "Word document (OOXML)"), ("xl/workbook.xml", "Excel workbook (OOXML)"), ("ppt/presentation.xml", "PowerPoint presentation (OOXML)")) if marker in lower_names), None)
+            macros = [name for name in lower_names if name.endswith("vbaproject.bin")]
+            if macros:
+                indicators.append("Office document contains a VBA project. Macros were not executed; verify that they are expected.")
+                findings.append({"name": "Office VBA project", "detail": "A VBA project file is present in the document archive.", "severity": "Review"})
+            external_links = 0
+            read_bytes = 0
+            for item in sample:
+                lower_name = item.filename.lower()
+                if not lower_name.endswith(".rels") or item.flag_bits & 1 or item.file_size > 256_000 or read_bytes + item.file_size > 1_000_000:
+                    continue
+                try:
+                    with archive.open(item) as member:
+                        data = member.read(256_001)
+                except (OSError, RuntimeError, zipfile.BadZipFile):
+                    continue
+                read_bytes += len(data)
+                external_links += len(re.findall(rb"TargetMode\s*=\s*['\"]External['\"]", data, re.IGNORECASE))
+            details["Relationship metadata read"] = f"{read_bytes} bytes"
+            if external_links:
+                indicators.append(f"Office relationship metadata contains {external_links} external link reference(s); links were not opened.")
+                findings.append({"name": "External document links", "detail": f"{external_links} external relationship(s) found.", "severity": "Review"})
+            if len(members) <= 100:
+                details["Archive review"] = "Directory and supported document metadata reviewed"
+            return details, indicators, findings, cautions, document_type
+    except (zipfile.BadZipFile, OSError, ValueError, EOFError):
+        indicators.append("ZIP signature is present, but the archive directory could not be read safely.")
+        findings.append({"name": "Unreadable archive", "detail": "The archive directory could not be validated.", "severity": "Review"})
+        cautions.append("Archive structure is unreadable.")
+        return details, indicators, findings, cautions, None
+
+
 def analyze_file(filename, content):
-    """Inspect file metadata and a few signatures; never execute or retain content."""
+    """Perform bounded static inspection; never execute, extract, or retain content."""
     if not content:
         raise ValueError("Choose a non-empty file to analyze.")
 
@@ -194,12 +269,17 @@ def analyze_file(filename, content):
     executable_types = {"Windows executable", "Linux executable"}
     extension_type = {
         ".exe": "Windows executable", ".dll": "Windows executable", ".scr": "Windows executable",
-        ".msi": "Windows executable", ".pdf": "PDF document", ".png": "PNG image",
+        ".msi": "Windows executable", ".sys": "Windows executable", ".pdf": "PDF document", ".png": "PNG image",
         ".jpg": "JPEG image", ".jpeg": "JPEG image", ".gif": "GIF image",
-        ".zip": "ZIP archive", ".gz": "GZIP archive", ".rar": "RAR archive",
+        ".zip": "ZIP archive", ".docx": "ZIP archive", ".docm": "ZIP archive", ".xlsx": "ZIP archive", ".xlsm": "ZIP archive", ".pptx": "ZIP archive", ".pptm": "ZIP archive",
+        ".jar": "ZIP archive", ".apk": "ZIP archive", ".gz": "GZIP archive", ".rar": "RAR archive",
         ".doc": "OLE compound document", ".xls": "OLE compound document", ".ppt": "OLE compound document",
     }
     indicators = []
+    findings = []
+    facts = {"Detected type": detected_type, "File size": f"{size} bytes", "Extension": suffix or "None"}
+    review_caution = False
+    confirmed_warning = False
     if detected_type in executable_types:
         indicators.append("The file signature matches an executable format. Do not run files you do not trust.")
     if suffix in {".exe", ".dll", ".scr", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".jar"}:
@@ -209,10 +289,74 @@ def analyze_file(filename, content):
         indicators.append("The file extension does not match the recognized file signature.")
     if len(PurePath(name).suffixes) > 1 and suffix in {".exe", ".scr", ".bat", ".cmd", ".js", ".vbs"}:
         indicators.append("The filename has multiple extensions ending in an executable or script type.")
-    if detected_type in {"ZIP archive", "GZIP archive", "RAR archive"}:
-        indicators.append("Archive contents were not opened or inspected.")
+        findings.append({"name": "Multiple file extensions", "detail": "The filename has more than one suffix and ends in an executable/script type.", "severity": "High"})
+        confirmed_warning = True
+    if expected_type and expected_type != detected_type:
+        findings.append({"name": "Extension/signature mismatch", "detail": f"Name ends in {suffix}; the recognized signature is {detected_type}.", "severity": "High" if expected_type in executable_types or detected_type in executable_types else "Review"})
+        review_caution = True
+        confirmed_warning = expected_type in executable_types or detected_type in executable_types
+
+    if detected_type == "Windows executable":
+        if len(content) >= 64:
+            pe_offset = int.from_bytes(content[0x3C:0x40], "little")
+            if pe_offset + 8 <= len(content) and content[pe_offset:pe_offset + 4] == b"PE\0\0":
+                machine = int.from_bytes(content[pe_offset + 4:pe_offset + 6], "little")
+                section_count = int.from_bytes(content[pe_offset + 6:pe_offset + 8], "little")
+                architectures = {0x14C: "x86", 0x8664: "x64", 0xAA64: "ARM64", 0x1C0: "ARM"}
+                facts["PE header"] = "Valid PE signature"
+                facts["PE architecture"] = architectures.get(machine, f"Unknown (0x{machine:04x})")
+                facts["PE section count"] = str(section_count)
+                if section_count == 0 or section_count > 96:
+                    indicators.append("Executable has an unusual PE section count; review with trusted endpoint-security software.")
+                    review_caution = True
+            else:
+                facts["PE header"] = "MZ signature found; standard PE header not confirmed"
+                indicators.append("The file starts with an MZ signature, but a standard PE header was not confirmed.")
+                review_caution = True
+        else:
+            facts["PE header"] = "MZ signature only; header too short"
+            review_caution = True
+
+    if detected_type == "ZIP archive":
+        zip_facts, zip_indicators, zip_findings, zip_cautions, document_type = _inspect_zip(content)
+        facts.update(zip_facts)
+        indicators.extend(zip_indicators)
+        findings.extend(zip_findings)
+        review_caution = review_caution or bool(zip_cautions) or bool(zip_findings)
+        confirmed_warning = confirmed_warning or any(item["severity"] == "High" for item in zip_findings)
+        if document_type:
+            detected_type = document_type
+            facts["Detected type"] = detected_type
+    elif detected_type in {"GZIP archive", "RAR archive"}:
+        indicators.append("Compressed archive contents are not inspected for this archive format.")
+        review_caution = True
+
     if detected_type == "OLE compound document":
-        indicators.append("This legacy document container can hold different content; its internal contents were not inspected.")
+        ole_text = content.decode("latin-1", errors="ignore").lower()
+        macro_terms = [term for term in ("vba", "autoopen", "document_open", "workbook_open", "createobject") if term in ole_text]
+        if macro_terms:
+            indicators.append(f"Legacy Office document contains {len(macro_terms)} macro-related marker group(s); macros were not executed.")
+            findings.append({"name": "Legacy Office macro hints", "detail": "Macro-related names or automation terms were found in the container bytes.", "severity": "Review"})
+            review_caution = True
+
+    if detected_type == "PDF document":
+        pdf_patterns = (
+            ("JavaScript actions", rb"/(?:JavaScript|JS)\b", "Review"),
+            ("automatic open actions", rb"/OpenAction\b", "Review"),
+            ("launch actions", rb"/Launch\b", "High"),
+            ("embedded files", rb"/EmbeddedFile\b", "Review"),
+            ("rich media objects", rb"/RichMedia\b", "Review"),
+        )
+        for label, pattern, severity in pdf_patterns:
+            matches = len(re.findall(pattern, content, re.IGNORECASE))
+            if matches:
+                indicators.append(f"PDF contains {matches} {label} marker(s); the document was not rendered or executed.")
+                findings.append({"name": f"PDF {label}", "detail": f"{matches} structural marker(s) found.", "severity": severity})
+                review_caution = True
+                confirmed_warning = confirmed_warning or severity == "High"
+        if not content.rstrip().endswith(b"%%EOF"):
+            indicators.append("PDF end marker is missing or not at the end; the file may be incomplete or have trailing data.")
+            review_caution = True
 
     # Scan printable strings in both ASCII and UTF-16LE without executing the
     # upload. These heuristics are not a malware signature scan.
@@ -227,20 +371,40 @@ def analyze_file(filename, content):
         ("JavaScript encoded-evaluation pattern", re.compile(r"(?:eval\s*\(\s*atob\s*\(|new\s+function\s*\(\s*atob\s*\()")),
         ("Windows download-and-execution API combination", re.compile(r"(?=.*(?:urldownloadtofile|internetopenurl|winhttpopenrequest))(?=.*(?:createprocess|shellexecute|winexec))")),
         ("Windows process-injection API combination", re.compile(r"(?=.*(?:virtualallocex|virtualalloc|virtualprotect))(?=.*(?:writeprocessmemory|createremotethread|queueuserapc))")),
+        ("Credential or browser-data access pattern", re.compile(r"(?:credential manager|logonpasswords|lsass|login data|\bcookies\b)[\s\S]{0,180}(?:read|copy|dump|decrypt|query)|(?:read|copy|dump|decrypt|query)[\s\S]{0,180}(?:credential manager|logonpasswords|lsass|login data|\bcookies\b)")),
+        ("Persistence or autorun pattern", re.compile(r"(?:currentversion\\run|schtasks\s+/create|new-service|startup folder|systemctl\s+enable|crontab\s+-[el])")),
+        ("Encoded command pattern", re.compile(r"(?:-enc(?:odedcommand)?\s+[a-z0-9+/]{32,}={0,2}|frombase64string\s*\(|\bbase64\s+-d\b)")),
     )
     matched_payload_patterns = [label for label, pattern in payload_patterns if pattern.search(content_text)]
     for label in matched_payload_patterns:
         indicators.append(f"Static content check matched a {label}; this can indicate harmful behavior but may also occur in security tests or documentation.")
+        findings.append({"name": label, "detail": "A configured static string pattern matched. This can be a false positive and does not confirm malicious behavior.", "severity": "High"})
+    confirmed_warning = confirmed_warning or bool(matched_payload_patterns)
+
+    entropy = _file_entropy(content)
+    facts["Byte entropy"] = f"{entropy:.2f} bits/byte (context only)"
+    if detected_type in executable_types and entropy >= 7.2:
+        indicators.append("Executable bytes have high entropy, which can occur with packing or encryption; this alone does not prove malware.")
+        findings.append({"name": "High-entropy executable", "detail": "High entropy may reflect packing, encryption, or normal bundled data.", "severity": "Review"})
+        review_caution = True
+
+    facts["Printable strings"] = str(len(re.findall(rb"[\x20-\x7e]{4,}", content)))
+    facts["Static pattern groups matched"] = str(len(matched_payload_patterns))
+    facts["Format-specific review"] = "Completed where supported"
+    if detected_type == "ZIP archive" and facts.get("Archive entries") == "Unreadable":
+        facts["Format-specific review"] = "Archive structure could not be read"
+    elif detected_type in {"GZIP archive", "RAR archive"}:
+        facts["Format-specific review"] = "Archive internals not inspected"
 
     if not indicators:
-        indicators.append("Only the file name, size, SHA-256 hash, and a short file signature were checked.")
+        indicators.append("No configured static warning matched; this is not proof that the file is safe.")
 
-    caution = any("executable" in item.lower() or "script" in item.lower() or "does not match" in item.lower() for item in indicators)
+    caution = review_caution or confirmed_warning or any("executable" in item.lower() or "script" in item.lower() or "does not match" in item.lower() for item in indicators)
     strong_caution = any("multiple extensions" in item.lower() for item in indicators) or (
         expected_type and expected_type != detected_type
         and (expected_type in executable_types or detected_type in executable_types)
     )
-    risk = "High" if strong_caution or matched_payload_patterns else "Low" if caution else "Normal"
+    risk = "High" if strong_caution or confirmed_warning else "Low" if caution else "Normal"
     recommendations = (
         ["Do not run this file. Verify where it came from and check it with trusted endpoint-security software."]
         if caution or matched_payload_patterns else
@@ -248,6 +412,8 @@ def analyze_file(filename, content):
     )
     if matched_payload_patterns:
         explanation = "Static content checks found one or more command or script patterns commonly associated with payload behavior. These pattern matches are heuristic and can be false positives; the file was not executed, and no antivirus or reputation scan was performed."
+    elif findings:
+        explanation = "CyberShield checked the file signature and performed bounded format-specific static inspection. Some structures, links, or active-content markers need review; these findings are indicators only, not proof of malware. The file was not executed and no antivirus or reputation scan was performed."
     elif detected_type in executable_types:
         explanation = "The file is a Windows or Linux executable. Limited printable-string checks did not match the configured payload patterns. Obfuscated, packed, encrypted, or otherwise unrecognized behavior may not appear in these strings; no code was executed and no antivirus scan was performed."
     elif strong_caution:
@@ -259,11 +425,13 @@ def analyze_file(filename, content):
     return {
         "label": "Potential payload pattern found" if matched_payload_patterns else "File needs review" if caution else "Basic file checks — no warning found",
         "risk": risk,
-        "summary": "Basic metadata, file signature, printable strings, and limited command or API-pattern combinations were checked. No antivirus scan was performed, so this file is not confirmed safe.",
+        "summary": f"Static review checked file metadata, SHA-256, signature, printable strings, and supported format-specific structure. {len(findings)} detailed indicator(s) were recorded; no antivirus or live reputation scan was performed.",
         "indicators": indicators,
         "explanation": explanation,
         "recommendations": recommendations,
-        "facts": {"Detected type": detected_type, "File size": f"{size} bytes", "Extension": suffix or "None", "Static pattern groups matched": str(len(matched_payload_patterns))},
+        "facts": facts,
+        "findings": findings,
+        "analysis_scope": "Static local review only; no code execution or disk extraction. No antivirus engine or live reputation lookup was used.",
         "target": name,
         "file_type": detected_type,
         "size": size,
