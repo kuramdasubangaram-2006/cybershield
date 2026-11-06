@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#081b3c">
+    <meta name="robots" content="index, follow">
+    <meta name="description" content="CyberShield KB helps security teams review suspicious files, URLs, IP addresses, and system logs with clear findings and downloadable reports.">
+    <meta property="og:site_name" content="CyberShield KB">
+    <meta property="og:title" content="CyberShield KB">
+    <meta property="og:description" content="Review files, URLs, IP addresses, and system logs with CyberShield KB security analysis tools.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://cybershield-kb.onrender.com/">
+    <link rel="canonical" href="https://cybershield-kb.onrender.com/">
+    <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='favicon.png') }}">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <title>CyberShield KB</title>
+    <script type="application/ld+json">
+      {{ {"@context": "https://schema.org", "@type": "WebSite", "name": "CyberShield KB", "alternateName": "CyberShield", "url": "https://cybershield-kb.onrender.com/"}|tojson }}
+    </script>
+  </head>
+  <body class="public-home-page">
+    <div class="public-home-shell">
+      <header class="public-home-header">
+        <a class="public-home-brand" href="/" aria-label="CyberShield KB home">
+          <img src="{{ url_for('static', filename='favicon.png') }}" alt="" width="44" height="44">
+          <span>CyberShield <strong>KB</strong></span>
+        </a>
+        <a class="public-home-signin" href="{{ url_for('login') }}">Sign in <span aria-hidden="true">→</span></a>
+      </header>
+
+      <main>
+        <section class="public-home-hero" aria-labelledby="home-title">
+          <div class="public-home-intro">
+            <p class="eyebrow">SECURITY OPERATIONS WORKSPACE</p>
+            <h1 id="home-title">CyberShield KB</h1>
+            <h2>Security activity, made easier to review.</h2>
+            <p class="public-home-summary">Review suspicious files, URLs, IP addresses, and system logs with focused checks, clear findings, and downloadable reports.</p>
+            <a class="sign-in-button public-home-cta" href="{{ url_for('login') }}">Open CyberShield KB <span aria-hidden="true">→</span></a>
+            <p class="public-home-note">A security analysis workspace for authorized users. Sign in to access your account and saved reports.</p>
+          </div>
+
+          <section class="public-home-tools" aria-label="CyberShield KB tools">
+            <article class="public-tool-item">
+              <span class="public-tool-icon" aria-hidden="true">▤</span>
+              <div><h3>File Analyzer</h3><p>Review file signatures, document structures, archives, and suspicious static patterns.</p></div>
+            </article>
+            <article class="public-tool-item">
+              <span class="public-tool-icon" aria-hidden="true">↗</span>
+              <div><h3>URL and IP checks</h3><p>Inspect URL structure, limited public page details, and IP address ranges.</p></div>
+            </article>
+            <article class="public-tool-item">
+              <span class="public-tool-icon" aria-hidden="true">≋</span>
+              <div><h3>Log Analysis</h3><p>Group common security events and correlate authentication activity.</p></div>
+            </article>
+            <article class="public-tool-item">
+              <span class="public-tool-icon" aria-hidden="true">▧</span>
+              <div><h3>Reports and history</h3><p>Review saved scan findings and download detailed PDF reports.</p></div>
+            </article>
+          </section>
+        </section>
+      </main>
+
+      <footer class="public-home-footer">
+        <span>CyberShield KB</span>
+        <span>Local checks support investigation; they are not a replacement for antivirus or live threat-intelligence services.</span>
+      </footer>
+    </div>
+  </body>
+</html>

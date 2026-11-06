@@ -252,7 +252,7 @@ def create_app():
             return redirect(url_for("setup"))
         user = get_current_user()
         if user is None:
-            return render_template("login.html", site_home=True)
+            return render_template("home.html")
         return redirect(url_for("dashboard"))
 
     @app.route("/setup", methods=["GET", "POST"])
@@ -904,6 +904,35 @@ def create_app():
     @app.get("/health")
     def health():
         return jsonify(status="ok", app="CyberShield"), 200
+
+    @app.get("/robots.txt")
+    def robots_txt():
+        content = (
+            "User-agent: *\n"
+            "Allow: /\n"
+            "Disallow: /dashboard\n"
+            "Disallow: /admin/\n"
+            "Disallow: /tools/\n"
+            "Disallow: /alerts-history\n"
+            "Disallow: /reports\n"
+            "Disallow: /scans/\n"
+            "Disallow: /account/\n"
+            "Disallow: /setup\n"
+            "Disallow: /forgot-password\n"
+            "Disallow: /reset-password\n"
+            "Sitemap: https://cybershield-kb.onrender.com/sitemap.xml\n"
+        )
+        return app.response_class(content, mimetype="text/plain")
+
+    @app.get("/sitemap.xml")
+    def sitemap_xml():
+        content = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            '<url><loc>https://cybershield-kb.onrender.com/</loc></url>'
+            '</urlset>'
+        )
+        return app.response_class(content, mimetype="application/xml")
 
     @app.errorhandler(403)
     def forbidden(_error):
