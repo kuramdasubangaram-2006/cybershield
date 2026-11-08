@@ -321,6 +321,43 @@ def create_app():
 
         return render_template("login.html")
 
+    @app.route("/register", methods=["GET", "POST"])
+    def register():
+        if not has_users():
+            return redirect(url_for("setup"))
+        if get_current_user() is not None:
+            return redirect(url_for("dashboard"))
+
+        if request.method == "POST":
+            if not validate_csrf():
+                abort(400)
+            email = request.form.get("email", "").strip().lower()
+            password = request.form.get("password", "")
+            confirmation = request.form.get("password_confirmation", "")
+
+            if not valid_email(email):
+                flash("Enter a valid email address.", "error")
+            elif len(password) < 12:
+                flash("Password must be at least 12 characters.", "error")
+            elif password != confirmation:
+                flash("The passwords do not match.", "error")
+            else:
+                try:
+                    db = get_db()
+                    db.execute(
+                        "INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'user')",
+                        (email, generate_password_hash(password)),
+                    )
+                    db.commit()
+                except INTEGRITY_ERRORS:
+                    get_db().rollback()
+                    flash("An account with this email address already exists.", "error")
+                else:
+                    flash("Account created. You can now sign in.", "success")
+                    return redirect(url_for("login"))
+
+        return render_template("register.html")
+
     @app.route("/forgot-password", methods=["GET", "POST"])
     def forgot_password():
         if request.method == "POST":

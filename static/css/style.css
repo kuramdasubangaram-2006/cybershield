@@ -1046,3 +1046,7 @@ body.login-page { color: #f1f5ff; background: radial-gradient(ellipse at 12% 22%
 @media (max-width: 850px) { .public-home-hero { grid-template-columns: 1fr; gap: 42px; padding: 54px 0; } .public-home-intro { max-width: 720px; } }
 @media (max-width: 560px) { .public-home-shell { padding: 0 20px; } .public-home-header { padding: 18px 0; } .public-home-brand { gap: 9px; font-size: .88rem; } .public-home-brand img { width: 38px; height: 38px; } .public-home-signin { padding: 9px 12px; font-size: .88rem; } .public-home-hero { gap: 30px; padding: 46px 0; } .public-home-tools { grid-template-columns: 1fr; } .public-tool-item { min-height: unset; padding: 17px; } .public-home-footer { flex-direction: column; gap: 7px; } }
 @media (prefers-reduced-motion: reduce) { .public-home-signin,.public-tool-item { transition: none; } .public-tool-item:hover { transform: none; } }
+
+body.login-page .account-switch { margin: 17px 0 0; color: #a9bad6; text-align: center; font-size: .92rem; }
+body.login-page .account-switch a { color: #54d8ff; font-weight: 700; text-decoration: none; }
+body.login-page .account-switch a:hover { color: #b4efff; text-decoration: underline; }
