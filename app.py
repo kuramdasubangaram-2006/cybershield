@@ -908,6 +908,8 @@ def create_app():
     @app.get("/robots.txt")
     def robots_txt():
         content = (
+            "User-agent: Google-InspectionTool\n"
+            "Allow: /\n\n"
             "User-agent: *\n"
             "Allow: /\n"
             "Disallow: /dashboard\n"
