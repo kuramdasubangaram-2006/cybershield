@@ -344,17 +344,22 @@ def create_app():
             else:
                 try:
                     db = get_db()
-                    db.execute(
-                        "INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'user')",
-                        (email, generate_password_hash(password)),
+                    password_hash = generate_password_hash(password)
+                    cursor = db.execute(
+                        "INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'user') RETURNING id",
+                        (email, password_hash),
                     )
+                    user_id = cursor.fetchone()["id"]
                     db.commit()
                 except INTEGRITY_ERRORS:
                     get_db().rollback()
                     flash("An account with this email address already exists.", "error")
                 else:
-                    flash("Account created. You can now sign in.", "success")
-                    return redirect(url_for("login"))
+                    session.clear()
+                    session["user_id"] = user_id
+                    session["password_token"] = make_password_token(password_hash)
+                    flash("Account created successfully.", "success")
+                    return redirect(url_for("dashboard"))
 
         return render_template("register.html")
 
