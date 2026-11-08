@@ -966,7 +966,10 @@ def create_app():
             "Disallow: /reset-password\n"
             "Sitemap: https://cybershield-kb.onrender.com/sitemap.xml\n"
         )
-        return app.response_class(content, mimetype="text/plain")
+        response = app.response_class(content, mimetype="text/plain")
+        # Prevent a CDN from retaining an older robots policy after it changes.
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+        return response
 
     @app.get("/sitemap.xml")
     def sitemap_xml():
