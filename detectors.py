@@ -784,17 +784,32 @@ def analyze_logs(value):
             parsed_timestamp = _log_field_value(parsed_fields, {"@timestamp", "timestamp", "time", "event.created"})
 
         matched_categories = [name for name, pattern in event_patterns.items() if pattern.search(line)]
+        cves = sorted({match.upper() for match in cve_pattern.findall(line)})
         event_names = []
         if failure_pattern.search(line): event_names.append("Authentication failure")
         if success_pattern.search(line): event_names.append("Successful authentication")
         if patterns["privileged_events"].search(line): event_names.append("Privileged command")
         if patterns["account_changes"].search(line): event_names.append("Account change")
         event_names.extend(name.replace("_", " ").title() for name in matched_categories)
+        if cves and not event_names:
+            reported_finding = re.search(
+                r"(?i)\b(?:scanner\s+findings?|vulnerability\s+findings?|findings?\s+(?:for|of|on)|"
+                r"vulnerabilit(?:y|ies)\s+(?:found|detected|reported)|"
+                r"(?:found|detected|reported)\s+(?:a\s+)?vulnerabilit(?:y|ies))\b",
+                line,
+            )
+            negated_finding = re.search(
+                r"(?i)\b(?:no|not|never)\s+(?:known\s+)?(?:vulnerabilit(?:y|ies)|findings?|affected)\b",
+                line,
+            )
+            if reported_finding and not negated_finding:
+                event_names.append("Vulnerability finding reported")
+            else:
+                event_names.append("CVE reference")
         event_name = ", ".join(dict.fromkeys(event_names)) or str(
             _log_field_value(parsed_fields, {"event.action", "event.name", "action", "event"})
             or "No configured pattern match"
         )
-        cves = sorted({match.upper() for match in cve_pattern.findall(line)})
         cvss_score_match = cvss_score_pattern.search(line)
         if cvss_score_match and line[cvss_score_match.end():cvss_score_match.end() + 1] == "/":
             cvss_score_match = None
@@ -893,6 +908,16 @@ def analyze_logs(value):
         ):
             failures_then_success.add(source)
 
+    reported_vulnerability_events = [
+        event for event in log_events
+        if "Vulnerability finding reported" in event["event"]
+    ]
+    high_cvss_vulnerability_events = [
+        event for event in reported_vulnerability_events
+        if event["cvss_base_calculated"] != "Not calculated"
+        and float(event["cvss_base_calculated"]) >= 7.0
+    ]
+
     indicators = []
     failed = counts["authentication_failures"]
     if failed:
@@ -910,6 +935,14 @@ def analyze_logs(value):
         indicators.append(f"A successful login followed failed attempts from the same source address for {len(failures_then_success)} source address(es). Confirm the account owner and session activity.")
     if counts["successful_logins"]:
         indicators.append(f"Found {counts['successful_logins']} line(s) matching common successful-login wording.")
+    if reported_vulnerability_events:
+        indicators.append(
+            f"The input reports {len(reported_vulnerability_events)} vulnerability finding(s). CVE identifiers, affected products, and scanner results were not independently verified."
+        )
+    for event in high_cvss_vulnerability_events:
+        indicators.append(
+            f"A reported vulnerability finding has a calculated CVSS v3.1 Base score of {event['cvss_base_calculated']} ({event['cvss_severity']}) from the supplied vector. Confirm the vector, affected asset, and remediation status in the source scanner."
+        )
     if counts["privileged_events"]:
         indicators.append(f"Found {counts['privileged_events']} line(s) mentioning privileged commands; confirm they were expected.")
     if counts["account_changes"]:
@@ -926,7 +959,10 @@ def analyze_logs(value):
         if count:
             indicators.append(f"Found {count} line(s) matching {category_labels[name]} wording. Review the original event details in your trusted log source.")
 
-    needs_review = bool(failed or counts["privileged_events"] or counts["account_changes"] or any(event_categories.values()))
+    needs_review = bool(
+        failed or counts["privileged_events"] or counts["account_changes"]
+        or any(event_categories.values()) or reported_vulnerability_events
+    )
     if not indicators:
         indicators.append("No configured keyword patterns matched; this does not prove the log is clean.")
     any_match = any(counts.values())
@@ -934,13 +970,20 @@ def analyze_logs(value):
     # policy, or negative result. Keep those as review leads. Escalate only
     # the locally correlated authentication patterns, and describe them as
     # suspicious rather than confirmed compromise.
-    high_risk = bool(burst_failure_sources or failures_then_success)
+    high_risk = bool(burst_failure_sources or failures_then_success or high_cvss_vulnerability_events)
     if high_risk:
-        recommendations = ["Review the matching source events and timestamps in the original system, verify whether the activity was expected, and follow your organization's incident process if it was not."]
-        explanation = "The log contains a correlated authentication pattern: at least five failures from one source within five minutes, or a successful login from a source that had earlier failures. This is a high-priority review lead, not proof that an account was compromised."
+        recommendations = ["Review the matching events and affected assets in the original system. Confirm scanner evidence and remediation status, and follow your organization's incident process if the activity was not expected."]
+        explanations = []
+        if burst_failure_sources or failures_then_success:
+            explanations.append("The log contains a correlated authentication pattern: at least five failures from one source within five minutes, or a successful login from a source that had earlier failures. This is a high-priority review lead, not proof that an account was compromised.")
+        if high_cvss_vulnerability_events:
+            explanations.append("The log also reports a vulnerability finding with a calculated CVSS v3.1 Base score of 7.0 or higher from a supplied vector. The score math was calculated locally; the CVE, affected asset, scanner evidence, and remediation state were not independently verified.")
+        explanation = " ".join(explanations)
     elif needs_review:
-        recommendations = ["Review the matching log entries in context and confirm that the account or privileged activity was expected."]
-        if failed and rapid_failure_sources:
+        recommendations = ["Review the matching log entries in context. Confirm any reported vulnerability against the source scanner and affected asset before acting."]
+        if reported_vulnerability_events and not (failed or counts["privileged_events"] or counts["account_changes"] or any(event_categories.values())):
+            explanation = "The input reports one or more vulnerability findings, but no complete CVSS v3.1 vector at High or Critical severity was available. CyberShield did not verify the CVE, affected product, scanner evidence, or remediation status."
+        elif failed and rapid_failure_sources:
             explanation = f"The sample has {failed} authentication-failure line(s), including at least 2 from the same source within 5 minutes. No same-source successful login, five-failure burst, privileged command, or account change was identified. This warrants review, but the small sample does not meet the stronger alert threshold."
         elif failed and repeated_failure_sources:
             explanation = f"The sample has {failed} authentication-failure line(s), including repeated attempts from the same source. No same-source successful login, five-failure burst, privileged command, or account change was identified. This warrants review, but the small sample does not meet the stronger alert threshold."
