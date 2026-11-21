@@ -3,6 +3,7 @@
 import hashlib
 import ipaddress
 import io
+import json
 import math
 import re
 import zipfile
@@ -10,6 +11,90 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import PurePath
 from urllib.parse import urlsplit
+
+
+_LOG_SECRET_KEY = re.compile(
+    r"(?i)(?:password|passwd|pwd|secret|token|authorization|proxy.?authorization|set.?cookie|cookie|"
+    r"api.?key|access.?key|private.?key|credential|otp|csrf|session.?id)"
+)
+_LOG_SECRET_ASSIGNMENT = re.compile(
+    r"(?i)\b([A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|authorization|proxy.?authorization|set.?cookie|cookie|"
+    r"api.?key|access.?key|private.?key|credential|otp|csrf|session.?id)[A-Za-z0-9_.-]*)\b([\"']?)"
+    r"(\s*[:=]\s*)(\"[^\"]*\"|'[^']*'|Bearer\s+\S+|[^\s,;]+)"
+)
+_LOG_BEARER = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
+_LOG_KEY_VALUE = re.compile(
+    r"(?:^|[\s,;{])['\"]?([A-Za-z][A-Za-z0-9_.-]{0,63})['\"]?\s*[:=]\s*"
+    r"(?:\"((?:\\.|[^\"])*)\"|'((?:\\.|[^'])*)'|([^\s,;}\]]+))"
+)
+
+
+def _redact_secret_assignment(match):
+    value = match.group(4)
+    if value.startswith('"'):
+        safe_value = '"[REDACTED]"'
+    elif value.startswith("'"):
+        safe_value = "'[REDACTED]'"
+    else:
+        safe_value = "[REDACTED]"
+    return f"{match.group(1)}{match.group(2)}{match.group(3)}{safe_value}"
+
+
+def _safe_log_value(key, value):
+    if _LOG_SECRET_KEY.search(str(key)):
+        return "[REDACTED]"
+    text = str(value)
+    text = _LOG_SECRET_ASSIGNMENT.sub(_redact_secret_assignment, text)
+    text = _LOG_BEARER.sub("Bearer [REDACTED]", text)
+    return text
+
+
+def _flatten_log_json(value, prefix="", depth=0):
+    """Flatten a JSON log object into safe scalar key/value fields."""
+    if depth > 8:
+        return {}
+    fields = {}
+    if isinstance(value, dict):
+        for key, child in value.items():
+            name = f"{prefix}.{key}" if prefix else str(key)
+            fields.update(_flatten_log_json(child, name, depth + 1))
+    elif isinstance(value, list):
+        for index, child in enumerate(value[:50]):
+            name = f"{prefix}[{index}]" if prefix else f"item[{index}]"
+            fields.update(_flatten_log_json(child, name, depth + 1))
+    elif prefix:
+        fields[prefix[:160]] = _safe_log_value(prefix, value)[:2000]
+    return fields
+
+
+def _extract_log_fields(line):
+    """Collect structured JSON and common key=value fields, redacting secrets."""
+    fields = {}
+    try:
+        parsed_json = json.loads(line)
+    except (json.JSONDecodeError, TypeError):
+        parsed_json = None
+    if isinstance(parsed_json, (dict, list)):
+        fields.update(_flatten_log_json(parsed_json))
+    else:
+        for match in _LOG_KEY_VALUE.finditer(line):
+            key = match.group(1)
+            value = next((group for group in match.groups()[1:] if group is not None), "")
+            fields.setdefault(key[:160], _safe_log_value(key, value)[:2000])
+    return fields
+
+
+def _log_field_value(fields, names):
+    wanted = {name.lower() for name in names}
+    for key, value in fields.items():
+        if key.lower() in wanted:
+            return value
+    return None
+
+
+def _sanitize_log_line(line):
+    """Retain useful event wording while redacting common credential fields."""
+    return _LOG_BEARER.sub("Bearer [REDACTED]", _LOG_SECRET_ASSIGNMENT.sub(_redact_secret_assignment, line))
 
 
 def analyze_ip(value):
@@ -124,20 +209,14 @@ def analyze_url(value):
     indicators.extend(strong_indicators)
     indicators.extend(caution_indicators)
 
-    if strong_indicators:
-        label = "Structural warning"
-        risk = "High"
-        summary = "Potentially deceptive URL structure found. Do not open it until it has been reviewed."
-        recommendations = ["Do not open the URL or enter credentials. Verify the complete hostname with the expected organization through a trusted channel."]
-        explanation = "One or more stronger URL-structure warning signs matched. An IP address in place of a domain, hidden user information, or punycode can make a destination harder to recognize. These signs are reasons to inspect the link; they do not prove that the site is malicious."
-    elif caution_indicators:
-        label = "Needs review"
+    if strong_indicators or caution_indicators:
+        label = "URL structure needs review"
         risk = "Low"
-        summary = "Some structural caution signs were found. No live threat-reputation check was performed."
-        recommendations = ["Check the hostname and scheme carefully. Avoid entering passwords until you confirm the destination."]
-        explanation = "Some caution signs matched, such as a non-HTTPS scheme, many subdomain levels, or an unusually long URL. These can occur on ordinary sites too, so verify the exact destination before using it."
+        summary = "One or more URL format indicators need context. They do not establish that the website is fake or malicious."
+        recommendations = ["Compare the exact hostname with the address you intended to visit. Treat these format indicators as review prompts, not a malicious-site verdict."]
+        explanation = "The URL contains format characteristics that can also appear on legitimate websites (for example, IP-based hosts, internationalized domains, long URLs, or HTTP). CyberShield did not verify threat reputation or prove malicious activity."
     else:
-        label = "No obvious structural warning — unverified"
+        label = "No local warning found — reputation unknown"
         risk = "Normal"
         summary = "No obvious structural warning was found. This does not confirm that the URL is safe."
         indicators.append("No live threat-intelligence lookup was performed.")
@@ -158,9 +237,90 @@ def analyze_url(value):
             "Host is an IP address": "Yes" if host_is_ip else "No",
             "Subdomain levels": str(max(0, len(hostname_labels) - 2)),
             "URL length": f"{len(raw_url)} characters",
+            "CVSS Base score": "Not assigned — this URL review did not identify a CVE-based software vulnerability.",
         },
         "target": raw_url,
     }
+
+
+def calculate_cvss31_base_score(vector):
+    """Calculate a CVSS v3.1 Base Score only from a complete, valid vector."""
+    if isinstance(vector, str):
+        vector = vector.upper()
+    if not isinstance(vector, str) or not vector.startswith("CVSS:3.1/"):
+        return None
+    metrics = {}
+    for component in vector[len("CVSS:3.1/"):].split("/"):
+        if ":" not in component:
+            return None
+        key, value = component.split(":", 1)
+        if key in metrics:
+            return None
+        metrics[key] = value
+    required = {"AV", "AC", "PR", "UI", "S", "C", "I", "A"}
+    optional_values = {
+        "E": {"X", "U", "P", "F"}, "RL": {"X", "O", "T", "W", "U"},
+        "RC": {"X", "U", "R", "C"}, "CR": {"X", "L", "M", "H"},
+        "IR": {"X", "L", "M", "H"}, "AR": {"X", "L", "M", "H"},
+        "MAV": {"X", "N", "A", "L", "P"}, "MAC": {"X", "L", "H"},
+        "MPR": {"X", "N", "L", "H"}, "MUI": {"X", "N", "R"},
+        "MS": {"X", "U", "C"}, "MC": {"X", "N", "L", "H"},
+        "MI": {"X", "N", "L", "H"}, "MA": {"X", "N", "L", "H"},
+    }
+    optional = set(optional_values)
+    if not required.issubset(metrics) or not set(metrics).issubset(required | optional):
+        return None
+    if any(metrics[key] not in values for key, values in optional_values.items() if key in metrics):
+        return None
+
+    weights = {
+        "AV": {"N": 0.85, "A": 0.62, "L": 0.55, "P": 0.20},
+        "AC": {"L": 0.77, "H": 0.44},
+        "UI": {"N": 0.85, "R": 0.62},
+        "C": {"N": 0.0, "L": 0.22, "H": 0.56},
+        "I": {"N": 0.0, "L": 0.22, "H": 0.56},
+        "A": {"N": 0.0, "L": 0.22, "H": 0.56},
+    }
+    if metrics["S"] not in {"U", "C"}:
+        return None
+    if any(metrics[key] not in values for key, values in weights.items()):
+        return None
+    pr_weights = ({"N": 0.85, "L": 0.62, "H": 0.27} if metrics["S"] == "U"
+                  else {"N": 0.85, "L": 0.68, "H": 0.50})
+    if metrics["PR"] not in pr_weights:
+        return None
+
+    iss = 1 - ((1 - weights["C"][metrics["C"]])
+               * (1 - weights["I"][metrics["I"]])
+               * (1 - weights["A"][metrics["A"]]))
+    if metrics["S"] == "U":
+        impact = 6.42 * iss
+    else:
+        impact = 7.52 * (iss - 0.029) - 3.25 * ((iss - 0.02) ** 15)
+    if impact <= 0:
+        return 0.0
+    exploitability = (8.22 * weights["AV"][metrics["AV"]]
+                      * weights["AC"][metrics["AC"]]
+                      * pr_weights[metrics["PR"]]
+                      * weights["UI"][metrics["UI"]])
+    score = min(impact + exploitability, 10) if metrics["S"] == "U" else min(1.08 * (impact + exploitability), 10)
+    return math.ceil((score - 1e-10) * 10) / 10
+
+
+def cvss_severity(score):
+    if score is None:
+        return "Not assigned"
+    if score < 0 or score > 10:
+        return "Invalid score"
+    if score == 0:
+        return "None"
+    if score < 4:
+        return "Low"
+    if score < 7:
+        return "Medium"
+    if score < 9:
+        return "High"
+    return "Critical"
 
 
 def _file_entropy(content):
@@ -440,13 +600,14 @@ def analyze_file(filename, content):
 
 
 def analyze_logs(value):
-    """Count a few common log phrases locally; never retain submitted log text."""
+    """Review common log patterns and extract only recognized structured fields."""
     if not value or not value.strip():
         raise ValueError("Paste log lines to analyze.")
     if len(value) > 20000:
         raise ValueError("Log text must be 20,000 characters or fewer.")
 
-    lines = [line for line in value.splitlines() if line.strip()]
+    numbered_lines = [(line_number, line) for line_number, line in enumerate(value.splitlines(), start=1) if line.strip()]
+    lines = [line for _, line in numbered_lines]
     if not lines:
         raise ValueError("Paste at least one non-empty log line.")
     if len(lines) > 1000:
@@ -481,21 +642,118 @@ def analyze_logs(value):
     event_categories = {name: sum(bool(pattern.search(line)) for line in lines) for name, pattern in event_patterns.items()}
     failure_pattern = patterns["authentication_failures"]
     success_pattern = patterns["successful_logins"]
-    source_pattern = re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])")
+    ip_token_pattern = re.compile(
+        r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])"
+        r"|(?<![\w:])(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(?![\w:])"
+    )
+    source_field_pattern = re.compile(
+        r"(?i)(?:source(?:[_ .](?:network[_ .])?address|[_ .]ip)?|src(?:_ip|addr|_addr)?|client[_ .]ip|remote[_ .](?:addr|ip))\s*[:=]\s*['\"]?([^\s,;\]}\"']+)"
+    )
+    destination_field_pattern = re.compile(
+        r"(?i)(?:destination(?:[_ .](?:network[_ .])?address|[_ .]ip)?|dest(?:_ip|addr|_addr)?|dst(?:_ip|addr|_addr)?)\s*[:=]\s*['\"]?([^\s,;\]}\"']+)"
+    )
+    source_port_pattern = re.compile(r"(?i)(?:source(?:[_ .]port)?|src_port|sport|spt)\s*[:=]\s*['\"]?(\d{1,5})")
+    destination_port_pattern = re.compile(r"(?i)(?:destination(?:[_ .]port)?|dest_port|dst_port|dport|dpt)\s*[:=]\s*['\"]?(\d{1,5})")
+    protocol_pattern = re.compile(r"(?i)(?:protocol|proto|network\.transport)\s*[=:]\s*['\"]?([a-z0-9_-]{1,20})")
+    severity_pattern = re.compile(r"(?i)(?:severity|level|loglevel)\s*[=:]\s*['\"]?(debug|info|notice|warning|warn|error|err|critical|crit|alert|emergency|fatal|low|medium|moderate|high)\b")
+    cve_pattern = re.compile(r"(?i)\bCVE-\d{4}-\d{4,}\b")
+    cvss_score_pattern = re.compile(r"(?i)\bCVSS(?:\s*(?:v|version)?\s*\d(?:\.\d)?)?\s*(?:base\s*)?(?:score\s*)?[:=]\s*(10(?:\.0)?|[0-9](?:\.\d)?)\b")
+    cvss_vector_pattern = re.compile(r"(?i)\bCVSS:\d\.\d/[A-Z0-9:/]+")
     timestamp_pattern = re.compile(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?")
     syslog_timestamp_pattern = re.compile(r"\b([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}:\d{2}:\d{2})\b")
     failure_sources = {}
     success_sources = {}
     timestamped_lines = 0
-    for line_number, line in enumerate(lines, start=1):
+    log_events = []
+    for line_number, line in numbered_lines:
+        parsed_fields = _extract_log_fields(line)
         addresses = set()
-        for candidate in source_pattern.findall(line):
+        for candidate in ip_token_pattern.findall(line):
             try:
                 addresses.add(str(ipaddress.ip_address(candidate)))
             except ValueError:
                 continue
-        source = next(iter(addresses)) if len(addresses) == 1 else None
+        def field_ip(pattern, nested_key):
+            match = pattern.search(line)
+            candidate = match.group(1).strip("[]()") if match else None
+            if candidate:
+                try:
+                    return str(ipaddress.ip_address(candidate))
+                except ValueError:
+                    pass
+            nested = re.search(
+                rf"(?i)[\"']{nested_key}[\"']\s*:\s*\{{[^{{}}]{{0,512}}?[\"']ip[\"']\s*:\s*[\"']([^\"']+)",
+                line,
+            )
+            if nested:
+                try:
+                    return str(ipaddress.ip_address(nested.group(1)))
+                except ValueError:
+                    pass
+            return None
+
+        source = field_ip(source_field_pattern, "source")
+        destination = field_ip(destination_field_pattern, "destination")
+        if source is None:
+            source_value = _log_field_value(parsed_fields, {"source.ip", "source_ip", "src", "src.ip", "src_ip", "client.ip", "client_ip", "remote_addr", "remote.ip"})
+            if source_value:
+                try:
+                    source = str(ipaddress.ip_address(str(source_value).strip("[]()")))
+                except ValueError:
+                    pass
+        if destination is None:
+            destination_value = _log_field_value(parsed_fields, {"destination.ip", "destination_ip", "dest", "dst", "dest.ip", "dest_ip", "dst.ip", "dst_ip"})
+            if destination_value:
+                try:
+                    destination = str(ipaddress.ip_address(str(destination_value).strip("[]()")))
+                except ValueError:
+                    pass
+        if source is None:
+            common_log_ip = re.match(r"^\s*(\S+)\s+-\s+\S+\s+\[", line)
+            if common_log_ip:
+                try:
+                    source = str(ipaddress.ip_address(common_log_ip.group(1)))
+                except ValueError:
+                    pass
+        if source is None and failure_pattern.search(line):
+            from_match = re.search(r"(?i)\bfrom\s+\[?([0-9a-fA-F:.]+)\]?(?:\s|$)", line)
+            if from_match:
+                try:
+                    source = str(ipaddress.ip_address(from_match.group(1)))
+                except ValueError:
+                    pass
+        if source is None and success_pattern.search(line):
+            from_match = re.search(r"(?i)\bfrom\s+\[?([0-9a-fA-F:.]+)\]?(?:\s|$)", line)
+            if from_match:
+                try:
+                    source = str(ipaddress.ip_address(from_match.group(1)))
+                except ValueError:
+                    pass
+        if source is None and len(addresses) == 1 and (failure_pattern.search(line) or success_pattern.search(line)):
+            source = next(iter(addresses))
+
+        def port_value(pattern):
+            match = pattern.search(line)
+            if not match:
+                return None
+            port = int(match.group(1))
+            return port if port <= 65535 else None
+
+        def structured_port(names):
+            value = _log_field_value(parsed_fields, names)
+            if value is None or not str(value).isdigit():
+                return None
+            port = int(value)
+            return port if port <= 65535 else None
+
+        source_port = port_value(source_port_pattern) or structured_port({"source.port", "source_port", "src.port", "src_port", "sport", "spt"})
+        destination_port = port_value(destination_port_pattern) or structured_port({"destination.port", "destination_port", "dest.port", "dest_port", "dst.port", "dst_port", "dport", "dpt"})
+        protocol_value = _log_field_value(parsed_fields, {"protocol", "proto", "network.transport", "transport"})
+        severity_value = _log_field_value(parsed_fields, {"severity", "level", "log.level", "event.severity"})
+
+        parsed_timestamp = None
         timestamp_match = timestamp_pattern.search(line)
+        syslog_match = None
         timestamp = None
         if timestamp_match:
             try:
@@ -518,6 +776,86 @@ def analyze_logs(value):
                     timestamped_lines += 1
                 except ValueError:
                     timestamp = None
+        if timestamp_match:
+            parsed_timestamp = timestamp_match.group(0)
+        elif syslog_match:
+            parsed_timestamp = syslog_match.group(0)
+        else:
+            parsed_timestamp = _log_field_value(parsed_fields, {"@timestamp", "timestamp", "time", "event.created"})
+
+        matched_categories = [name for name, pattern in event_patterns.items() if pattern.search(line)]
+        event_names = []
+        if failure_pattern.search(line): event_names.append("Authentication failure")
+        if success_pattern.search(line): event_names.append("Successful authentication")
+        if patterns["privileged_events"].search(line): event_names.append("Privileged command")
+        if patterns["account_changes"].search(line): event_names.append("Account change")
+        event_names.extend(name.replace("_", " ").title() for name in matched_categories)
+        event_name = ", ".join(dict.fromkeys(event_names)) or str(
+            _log_field_value(parsed_fields, {"event.action", "event.name", "action", "event"})
+            or "No configured pattern match"
+        )
+        cves = sorted({match.upper() for match in cve_pattern.findall(line)})
+        cvss_score_match = cvss_score_pattern.search(line)
+        if cvss_score_match and line[cvss_score_match.end():cvss_score_match.end() + 1] == "/":
+            cvss_score_match = None
+        if not cvss_score_match:
+            structured_score = _log_field_value(parsed_fields, {"cvss.score", "cvss.base_score", "cvss.baseScore", "vulnerability.cvss.base_score"})
+            if structured_score is None:
+                structured_score = next((value for key, value in parsed_fields.items() if "cvss" in key.lower() and "score" in key.lower()), None)
+            if structured_score is not None and re.fullmatch(r"(?:10(?:\.0)?|[0-9](?:\.\d)?)", str(structured_score)):
+                cvss_score_value = str(structured_score)
+            else:
+                cvss_score_value = None
+        else:
+            cvss_score_value = cvss_score_match.group(1)
+        cvss_vector_match = cvss_vector_pattern.search(line)
+        if not cvss_vector_match:
+            structured_vector = _log_field_value(parsed_fields, {"cvss.vector", "cvss_vector", "vulnerability.cvss.vector"})
+            if structured_vector is None:
+                structured_vector = next((value for key, value in parsed_fields.items() if "cvss" in key.lower() and "vector" in key.lower()), None)
+            cvss_vector = str(structured_vector) if structured_vector and str(structured_vector).startswith("CVSS:") else None
+        else:
+            cvss_vector = cvss_vector_match.group(0).rstrip(".,;)")
+        computed_cvss31 = calculate_cvss31_base_score(cvss_vector) if cvss_vector else None
+        reported_score = cvss_score_value
+        reported_score_value = float(reported_score) if reported_score is not None else None
+        if computed_cvss31 is not None:
+            cvss_note = "CVSS v3.1 Base Score calculated from the supplied Base metrics; vector not independently verified."
+            if reported_score is not None and abs(float(reported_score) - computed_cvss31) >= 0.1:
+                cvss_note += f" Supplied score {reported_score} differs from the calculated Base Score."
+        elif cvss_vector and cvss_vector.startswith("CVSS:4.0/"):
+            cvss_note = "CVSS v4.0 vector captured; score not calculated because this analyzer only implements the v3.1 Base formula."
+        elif reported_score or cvss_vector:
+            cvss_note = "CVSS value copied from the supplied log; not independently validated."
+        else:
+            cvss_note = "No CVSS vector/score supplied; no CVSS score assigned."
+        if source_port is None and source and (failure_pattern.search(line) or success_pattern.search(line)):
+            ssh_port = re.search(r"(?i)\bfrom\s+\[?[0-9a-fA-F:.]+\]?\s+port\s+(\d{1,5})\b", line)
+            if ssh_port and int(ssh_port.group(1)) <= 65535:
+                source_port = int(ssh_port.group(1))
+        protocol_match = protocol_pattern.search(line)
+        severity_match = severity_pattern.search(line)
+        log_events.append({
+            "line": line_number,
+            "timestamp": parsed_timestamp or "Not present",
+            "event": event_name,
+                "severity": (severity_match.group(1).upper() if severity_match else str(severity_value).upper() if severity_value else "Not specified"),
+            "source_ip": source or "Not present",
+            "source_port": str(source_port) if source_port is not None else "Not present",
+            "destination_ip": destination or "Not present",
+            "destination_port": str(destination_port) if destination_port is not None else "Not present",
+            "other_ips": sorted(addresses - {item for item in (source, destination) if item}),
+                "protocol": (protocol_match.group(1).upper() if protocol_match else str(protocol_value).upper() if protocol_value else "Not present"),
+            "cves": cves,
+            "cvss_as_reported": reported_score or "Not present",
+            "cvss_reported_severity": cvss_severity(reported_score_value),
+            "cvss_vector_as_reported": cvss_vector or "Not present",
+            "cvss_base_calculated": f"{computed_cvss31:.1f}" if computed_cvss31 is not None else "Not calculated",
+            "cvss_severity": cvss_severity(computed_cvss31) if computed_cvss31 is not None else "Not assigned",
+            "cvss_note": cvss_note,
+            "fields": parsed_fields,
+            "line_excerpt": _sanitize_log_line(line),
+        })
         event = (line_number, timestamp)
         if source and failure_pattern.search(line):
             failure_sources.setdefault(source, []).append(event)
@@ -547,7 +885,12 @@ def analyze_logs(value):
     for source in set(failure_sources) & set(success_sources):
         failures = failure_sources[source]
         successes = success_sources[source]
-        if any(success_line > failure_line for success_line, _ in successes for failure_line, _ in failures):
+        if any(
+            success_time > failure_time if success_time is not None and failure_time is not None
+            else success_line > failure_line
+            for success_line, success_time in successes
+            for failure_line, failure_time in failures
+        ):
             failures_then_success.add(source)
 
     indicators = []
@@ -558,9 +901,9 @@ def analyze_logs(value):
             indicators.append("The number of matching failures is high enough to review against expected activity.")
     if repeated_failure_sources:
         repeated_attempts = sum(len(events) for events in repeated_failure_sources.values())
-        indicators.append(f"Repeated authentication failures came from {len(repeated_failure_sources)} source address(es), accounting for {repeated_attempts} failed line(s). Source values are omitted from the saved report.")
+        indicators.append(f"Repeated authentication failures came from {len(repeated_failure_sources)} source address(es), accounting for {repeated_attempts} failed line(s). Parsed addresses appear in the detailed event table when the log format identifies them explicitly.")
     if rapid_failure_sources:
-        indicators.append(f"At least 2 authentication failures from the same source occurred within 5 minutes for {len(rapid_failure_sources)} source address(es); the report records source counts only.")
+        indicators.append(f"At least 2 authentication failures from the same source occurred within 5 minutes for {len(rapid_failure_sources)} source address(es). Parsed addresses appear in the detailed event table when identifiable.")
     if burst_failure_sources:
         indicators.append(f"At least 5 authentication failures from the same source occurred within a 5-minute window for {len(burst_failure_sources)} source address(es). This pattern needs prompt review.")
     if failures_then_success:
@@ -587,15 +930,14 @@ def analyze_logs(value):
     if not indicators:
         indicators.append("No configured keyword patterns matched; this does not prove the log is clean.")
     any_match = any(counts.values())
-    high_risk = failed >= 10 or bool(burst_failure_sources) or bool(failures_then_success) or any(
-        event_categories[name] for name in ("malware_or_endpoint_alerts", "web_or_application_attacks", "data_or_policy_events")
-    )
+    # A keyword like "malware" or "SQL injection" may appear in a test,
+    # policy, or negative result. Keep those as review leads. Escalate only
+    # the locally correlated authentication patterns, and describe them as
+    # suspicious rather than confirmed compromise.
+    high_risk = bool(burst_failure_sources or failures_then_success)
     if high_risk:
         recommendations = ["Review the matching source events and timestamps in the original system, verify whether the activity was expected, and follow your organization's incident process if it was not."]
-        if any(event_categories[name] for name in ("malware_or_endpoint_alerts", "web_or_application_attacks", "data_or_policy_events")):
-            explanation = "One or more lines matched higher-priority malware, web-attack, or data-policy wording, or a stronger authentication pattern. Treat this as a lead to investigate in the original security tool; keyword matches alone do not confirm compromise."
-        else:
-            explanation = "The log contains a stronger authentication pattern: a high number of failures, a short burst from one source, or a successful login after failures from that source. This is suspicious activity to investigate, not proof of compromise."
+        explanation = "The log contains a correlated authentication pattern: at least five failures from one source within five minutes, or a successful login from a source that had earlier failures. This is a high-priority review lead, not proof that an account was compromised."
     elif needs_review:
         recommendations = ["Review the matching log entries in context and confirm that the account or privileged activity was expected."]
         if failed and rapid_failure_sources:
@@ -631,9 +973,19 @@ def analyze_logs(value):
             "Timestamped lines": str(timestamped_lines),
             "Log format coverage": f"Recognized timestamps on {timestamped_lines} of {len(lines)} lines",
             "Event category matches": str(sum(event_categories.values())),
+            "Log lines with detailed records": str(len(log_events)),
+            "Unique IP addresses observed": str(len({address for event in log_events for address in event["other_ips"]} | {event["source_ip"] for event in log_events if event["source_ip"] != "Not present"} | {event["destination_ip"] for event in log_events if event["destination_ip"] != "Not present"})),
+            "CVSS Base score": "Calculated only from a complete CVSS v3.1 vector in the input; otherwise left unassigned.",
         },
         "target": f"Pasted log sample ({len(lines)} lines)",
         "line_count": len(lines),
         "counts": {**counts, "distinct_failure_sources": len(failure_sources), "repeated_failure_sources": len(repeated_failure_sources), "rapid_failure_sources": len(rapid_failure_sources), "failures_then_success": len(failures_then_success), "timestamped_lines": timestamped_lines},
         "event_categories": event_categories,
+        "log_events": log_events,
+        "analysis_scope": (
+            "Local log parsing only; every non-empty input line is represented in the report. The original unmodified text is not retained; a sanitized line excerpt and recognized structured fields are saved. "
+            "Common password, token, cookie, authorization, and secret fields are redacted. "
+            "CVSS v3.1 Base is calculated only from a complete vector present in the input. CVSS v4 vectors and unscored CVE IDs are recorded but not assigned an invented score. "
+            "No Nessus plugin scan, external CVE lookup, or live threat-intelligence query was performed."
+        ),
     }

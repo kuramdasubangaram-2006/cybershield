@@ -13,7 +13,7 @@
       <textarea class="form-control log-textarea" id="log_text" name="log_text" rows="9" maxlength="20000" placeholder="Paste a small log sample here…" required>{{ submitted_text }}</textarea>
       <button class="btn sign-in-button log-submit-button" type="submit">Analyze logs <span aria-hidden="true">→</span></button>
     </form>
-    <p class="scanner-privacy-note"><span class="secure-dot"></span> The submitted lines are checked in memory and not saved. Only counts and findings are added to your account history. Avoid pasting passwords, tokens, or other secrets.</p>
+    <p class="scanner-privacy-note"><span class="secure-dot"></span> The original unmodified text is not saved. Every non-empty line is represented by a sanitized excerpt and extracted fields in your account history. Common password, token, cookie, authorization, and secret values are redacted. Avoid pasting credentials or other highly sensitive data.</p>
   </section>
 
   {% if result %}
@@ -24,6 +24,7 @@
       </div>
       <p class="result-summary">{{ result.summary }}</p>
       <p class="result-summary">{{ result.explanation }}</p>
+      <p class="role-note left-note">{{ result.analysis_scope }}</p>
       <div class="log-count-grid">
         <div><span>Lines reviewed</span><strong>{{ result.line_count }}</strong></div>
         <div><span>Authentication failures</span><strong>{{ result.counts.authentication_failures }}</strong></div>
@@ -44,6 +45,33 @@
             {% for category, count in result.event_categories.items() %}
               <div><span>{{ category.replace('_', ' ')|title }}</span><strong>{{ count }}</strong></div>
             {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+      {% if result.log_events %}
+        <div class="indicator-block">
+          <h4>Parsed log events and network details</h4>
+          <p>All non-empty input lines are included. “Not present” means a field was not recognized in that line; unlabelled addresses are kept separate instead of guessed as source or destination. CVSS describes vulnerability severity, separate from the log activity risk label.</p>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead><tr><th>Line / time</th><th>Event / level</th><th>Source IP : port</th><th>Destination IP : port</th><th>Protocol</th><th>CVE / CVSS as written</th></tr></thead>
+              <tbody>
+                {% for event in result.log_events %}
+                  <tr>
+                    <td>{{ event.line }}<br><small>{{ event.timestamp }}</small></td>
+                    <td>{{ event.event }}<br><small>{{ event.severity }}</small></td>
+                    <td><code>{{ event.source_ip }}{% if event.source_port != 'Not present' %}:{{ event.source_port }}{% endif %}</code>{% if event.other_ips %}<br><small>Unattributed: {{ event.other_ips|join(', ') }}</small>{% endif %}</td>
+                    <td><code>{{ event.destination_ip }}{% if event.destination_port != 'Not present' %}:{{ event.destination_port }}{% endif %}</code></td>
+                    <td>{{ event.protocol }}</td>
+                    <td>{% if event.cves %}{{ event.cves|join(', ') }}<br>{% endif %}Reported: {{ event.cvss_as_reported }} ({{ event.cvss_reported_severity }})<br>Calculated v3.1 Base: {{ event.cvss_base_calculated }} ({{ event.cvss_severity }})<br><small>{{ event.cvss_vector_as_reported }} {{ event.cvss_note }}</small></td>
+                  </tr>
+                  <tr><td colspan="6"><details><summary>Extracted fields and sanitized line</summary>
+                    {% if event.fields %}<ul>{% for key, value in event.fields.items() %}<li><code>{{ key }}</code>: {{ value }}</li>{% endfor %}</ul>{% endif %}
+                    <pre class="log-line-excerpt">{{ event.line_excerpt }}</pre>
+                  </details></td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </div>
         </div>
       {% endif %}

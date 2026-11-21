@@ -97,6 +97,39 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
             f"{item.get('severity', 'Review')} — {item.get('name', 'Finding')}: {item.get('detail', '')}"
             for item in details["findings"] if isinstance(item, dict)
         ])
+    if details.get("log_events"):
+        event_lines = []
+        for event in details["log_events"]:
+            source = event.get("source_ip", "Not present")
+            if event.get("source_port") not in (None, "Not present"):
+                source += f":{event['source_port']}"
+            destination = event.get("destination_ip", "Not present")
+            if event.get("destination_port") not in (None, "Not present"):
+                destination += f":{event['destination_port']}"
+            other_ips = ", ".join(event.get("other_ips", [])) or "Not present"
+            cve_text = ", ".join(event.get("cves", [])) or "Not present"
+            parsed_fields = "; ".join(
+                f"{key}={value}" for key, value in event.get("fields", {}).items()
+            ) or "No structured fields recognized"
+            event_lines.append(
+                f"Line {event.get('line', '?')} | {event.get('timestamp', 'Not present')} | "
+                f"{event.get('event', 'Event')} ({event.get('severity', 'Not specified')}) | "
+                f"Source: {source} | Destination: {destination} | "
+                f"Unattributed IPs: {other_ips} | "
+                f"Protocol: {event.get('protocol', 'Not present')} | CVE: {cve_text} | "
+                f"CVSS score as written: {event.get('cvss_as_reported', 'Not present')} | "
+                f"Reported severity: {event.get('cvss_reported_severity', 'Not assigned')} | "
+                f"Calculated CVSS v3.1 Base: {event.get('cvss_base_calculated', 'Not calculated')} "
+                f"({event.get('cvss_severity', 'Not assigned')}) | "
+                f"Vector as written: {event.get('cvss_vector_as_reported', 'Not present')} | "
+                f"{event.get('cvss_note', 'No CVSS verification performed.')} | "
+                f"Extracted fields: {parsed_fields} | Sanitized line: {event.get('line_excerpt', '')}"
+            )
+        add_section("Parsed log events and network details", event_lines)
+    elif scan["module"] == "Log Analysis":
+        add_section("Log detail availability", [
+            "Line-level data is not available for this earlier scan because the original log text was not retained. Rerun the analysis to generate the expanded event report."
+        ])
 
     facts = details.get("facts") or {}
     if details.get("sha256"):

@@ -169,13 +169,16 @@ def persisted_analysis_details(result):
     """Keep derived findings only; never persist uploaded bytes or pasted log text."""
     allowed = {
         "label", "explanation", "site_explanation", "redirect_chain", "indicators", "recommendations",
-        "facts", "line_count", "counts", "event_categories", "file_type", "size", "sha256", "findings", "analysis_scope",
+        "facts", "line_count", "counts", "event_categories", "log_events",
+        "file_type", "size", "sha256", "findings", "analysis_scope",
     }
     return {key: value for key, value in result.items() if key in allowed}
 
 
 def analyze_url_live(value):
     result = analyze_url(value)
+    result["facts"]["Threat reputation"] = "Not queried — no live threat-intelligence provider is connected."
+    result["facts"]["CVSS Base score"] = "Not applicable — this check does not identify CVE-based software vulnerabilities."
     try:
         site = inspect_public_site(value)
     except (OSError, ValueError, http.client.HTTPException):
