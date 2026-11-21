@@ -6,11 +6,14 @@
   </section>
 
   <section class="content-panel scanner-panel">
-    <div class="panel-heading"><div><h3>Paste log lines to review</h3><p>Up to 1,000 lines or 20,000 characters per review.</p></div></div>
-    <form class="log-form" method="post">
+    <div class="panel-heading"><div><h3>Upload a log file or paste log lines</h3><p>Choose one method. Up to 1,000 lines or 20,000 characters per review.</p></div></div>
+    <form class="log-form" method="post" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label class="form-label" for="log_text">Log text</label>
-      <textarea class="form-control log-textarea" id="log_text" name="log_text" rows="9" maxlength="20000" placeholder="Paste a small log sample here…" required>{{ submitted_text }}</textarea>
+      <label class="form-label" for="log_file">Choose a log file (.log, .txt, .json, .jsonl, .csv)</label>
+      <input class="form-control" id="log_file" name="log_file" type="file" accept=".log,.txt,.json,.jsonl,.csv,text/plain,application/json,text/csv">
+      <p class="form-help">File content is read for this analysis only; the original file is not saved.</p>
+      <label class="form-label mt-3" for="log_text">Or paste log text</label>
+      <textarea class="form-control log-textarea" id="log_text" name="log_text" rows="9" maxlength="20000" placeholder="Paste log lines here…">{{ submitted_text }}</textarea>
       <button class="btn sign-in-button log-submit-button" type="submit">Analyze logs <span aria-hidden="true">→</span></button>
     </form>
     <p class="scanner-privacy-note"><span class="secure-dot"></span> The original unmodified text is not saved. Every non-empty line is represented by a sanitized excerpt and extracted fields in your account history. Common password, token, cookie, authorization, and secret values are redacted. Avoid pasting credentials or other highly sensitive data.</p>

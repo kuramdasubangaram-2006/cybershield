@@ -650,11 +650,36 @@ def create_app():
             if not validate_csrf():
                 abort(400)
             submitted_text = request.form.get("log_text", "")
+            uploaded = request.files.get("log_file")
+            has_upload = uploaded is not None and bool(uploaded.filename)
+            if has_upload and submitted_text.strip():
+                flash("Paste logs or upload one log file, not both.", "error")
+            elif has_upload:
+                from pathlib import Path
+
+                if Path(uploaded.filename).suffix.lower() not in {".log", ".txt", ".json", ".jsonl", ".csv"}:
+                    flash("Choose a .log, .txt, .json, .jsonl, or .csv text file.", "error")
+                else:
+                    raw_log = uploaded.stream.read(80001)
+                    if len(raw_log) > 80000:
+                        flash("Log file is too large. Maximum size is 20,000 text characters.", "error")
+                    else:
+                        try:
+                            submitted_text = raw_log.decode("utf-8-sig")
+                            if "\x00" in submitted_text:
+                                raise ValueError("This looks like a binary file. Choose a plain-text log file.")
+                            if not submitted_text.strip():
+                                flash("The selected log file is empty. Choose a file with log lines.", "error")
+                                submitted_text = ""
+                        except UnicodeDecodeError:
+                            flash("Could not read this file as UTF-8 text. Save it as UTF-8 and try again.", "error")
+                        except ValueError as error:
+                            flash(str(error), "error")
             if submitted_text.strip() and scan_rate_limited(get_current_user()["id"]):
                 rate_limited = True
                 submitted_text = ""
                 flash("Scan limit reached. Please wait until the next minute before scanning again.", "error")
-            else:
+            elif submitted_text.strip():
                 try:
                     result = analyze_logs(submitted_text)
                 except ValueError as error:
