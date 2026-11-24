@@ -1301,7 +1301,7 @@ body.login-page.auth-screen .login-card .form-control:hover {
   .dashboard-page button { transition: none; }
 }
 
-/* Subtle animated HUD underlay for dashboard pages. */
+/* Clearly visible animated HUD background for dashboard pages. */
 .dashboard-main { overflow: hidden; }
 .dashboard-background-video {
   position: absolute;
@@ -1311,17 +1311,22 @@ body.login-page.auth-screen .login-card .form-control:hover {
   height: 100%;
   object-fit: cover;
   object-position: center;
-  opacity: .42;
+  opacity: .88;
   pointer-events: none;
 }
 .dashboard-main::before {
   background:
-    linear-gradient(120deg, rgba(5, 12, 29, .7), rgba(7, 11, 32, .58)),
+    linear-gradient(120deg, rgba(5, 12, 29, .18), rgba(7, 11, 32, .2)),
     repeating-linear-gradient(0deg, transparent 0 48px, rgba(88, 134, 225, .035) 49px),
     repeating-linear-gradient(90deg, transparent 0 48px, rgba(88, 134, 225, .035) 49px);
 }
+.dashboard-topbar {
+  background: rgba(9, 19, 43, .42);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
 @media (max-width: 700px) {
-  .dashboard-background-video { opacity: .3; }
+  .dashboard-background-video { opacity: .76; }
 }
 @media (prefers-reduced-motion: reduce) {
   .dashboard-background-video { display: none; }
