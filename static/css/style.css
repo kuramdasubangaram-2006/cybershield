@@ -1693,3 +1693,39 @@ body.login-page.auth-screen .login-card .form-control:hover {
 @media (max-width: 700px) {
   .dashboard-page .dashboard-sidebar { background: linear-gradient(90deg, rgba(77, 170, 230, .14), rgba(139, 112, 221, .14)); }
 }
+
+/* Use crisp, high-contrast type over the moving HUD background. */
+.dashboard-page .dashboard-brand,
+.dashboard-page .sidebar-label,
+.dashboard-page .sidebar-bottom,
+.dashboard-page .side-link { color: #f4faff; }
+.dashboard-page .dashboard-brand .brand-accent,
+.dashboard-page .dashboard-sidebar .brand-mark,
+.dashboard-page .side-link > span:first-child { color: #8cecff; }
+.dashboard-page .sidebar-label { color: #a9e8ff; letter-spacing: .13em; }
+.dashboard-page .side-link {
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(1, 8, 25, .98), 0 0 8px rgba(1, 8, 25, .82);
+  -webkit-text-stroke: .22px rgba(1, 8, 25, .82);
+}
+.dashboard-page .side-link.active,
+.dashboard-page .side-link:hover,
+.dashboard-page .side-link:not(.disabled):focus-visible { color: #a9f3ff; }
+.dashboard-page .dashboard-topbar :is(.eyebrow, h1, strong, small, a) {
+  color: #f6fbff;
+  text-shadow: 0 1px 2px rgba(1, 8, 25, .98), 0 0 9px rgba(1, 8, 25, .82);
+  -webkit-text-stroke: .2px rgba(1, 8, 25, .78);
+}
+.dashboard-page .dashboard-topbar .eyebrow { color: #90edff; }
+.dashboard-page .dashboard-content :is(h2, h3, h4, p, small, label, span, td, th, strong, code) {
+  color: #f4f9ff;
+  text-shadow: 0 1px 2px rgba(1, 8, 25, .98), 0 0 9px rgba(1, 8, 25, .82);
+  -webkit-text-stroke: .18px rgba(1, 8, 25, .78);
+}
+.dashboard-page .dashboard-content :is(h2, h3, h4) { color: #a4edff; font-weight: 700; }
+.dashboard-page .dashboard-content :is(.chart-axis-label, .chart-day-label) {
+  fill: #f4faff;
+  paint-order: stroke;
+  stroke: rgba(1, 8, 25, .85);
+  stroke-width: 2px;
+}
