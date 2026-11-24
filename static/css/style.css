@@ -1225,3 +1225,78 @@ body.login-page.auth-screen .form-footer { margin-top: 10px; color: rgba(227, 24
   body.auth-screen .auth-background-video { display: none; }
   body.auth-screen .auth-video-overlay { background: radial-gradient(ellipse at 50% 30%, #114a72, #050a1c 78%); }
 }
+
+/* Clear hover and keyboard-focus feedback for the sign-in controls. */
+body.login-page.auth-screen .login-card a,
+body.login-page.auth-screen .login-card button,
+body.login-page.auth-screen .login-card .form-check-input {
+  transition: color .16s ease, background-color .16s ease, border-color .16s ease,
+    box-shadow .16s ease, transform .16s ease;
+}
+body.login-page.auth-screen .google-signin-button:hover,
+body.login-page.auth-screen .google-signin-button:focus-visible {
+  border-color: #83efff;
+  background: rgba(87, 211, 255, .2);
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(87, 211, 255, .22), 0 0 20px rgba(57, 190, 255, .2);
+}
+body.login-page.auth-screen .text-link:hover,
+body.login-page.auth-screen .account-switch a:hover,
+body.login-page.auth-screen .developer-credit a:hover {
+  color: #fff;
+  text-shadow: 0 0 12px rgba(102, 229, 255, .72);
+}
+body.login-page.auth-screen .password-toggle:hover,
+body.login-page.auth-screen .password-toggle:focus-visible {
+  color: #fff;
+  text-shadow: 0 0 12px rgba(102, 229, 255, .72);
+}
+body.login-page.auth-screen .login-card .form-control:hover {
+  border-color: rgba(112, 225, 255, .78);
+  box-shadow: 0 0 0 1px rgba(112, 225, 255, .18);
+}
+
+/* Keep dashboard navigation and actions visibly highlighted on hover/focus. */
+.dashboard-page .side-link:not(.disabled),
+.dashboard-page button:not(:disabled),
+.dashboard-page .sign-out-button,
+.dashboard-page .scan-detail-link,
+.dashboard-page .primary-link,
+.dashboard-page .detail-view-button,
+.dashboard-page .clear-history-button {
+  transition: color .16s ease, background-color .16s ease, border-color .16s ease,
+    box-shadow .16s ease, transform .16s ease;
+}
+.dashboard-page .side-link:not(.disabled):hover,
+.dashboard-page .side-link:not(.disabled):focus-visible {
+  border-color: rgba(84, 224, 255, .72);
+  background: linear-gradient(90deg, rgba(23, 177, 239, .38), rgba(105, 75, 245, .34));
+  color: #fff;
+  box-shadow: 0 0 22px rgba(39, 168, 255, .24);
+}
+.dashboard-page button:not(:disabled):hover,
+.dashboard-page button:not(:disabled):focus-visible,
+.dashboard-page .sign-out-button:hover,
+.dashboard-page .sign-out-button:focus-visible,
+.dashboard-page .detail-view-button:hover,
+.dashboard-page .clear-history-button:hover {
+  border-color: rgba(88, 222, 255, .78);
+  box-shadow: 0 0 0 2px rgba(64, 185, 255, .16), 0 0 18px rgba(52, 137, 255, .2);
+  color: #fff;
+}
+.dashboard-page .dashboard-content a:hover,
+.dashboard-page .dashboard-content a:focus-visible {
+  color: #a4f2ff;
+  text-shadow: 0 0 12px rgba(76, 202, 255, .5);
+}
+.dashboard-page .form-control:hover,
+.dashboard-page .form-select:hover {
+  border-color: rgba(88, 202, 255, .58);
+}
+@media (prefers-reduced-motion: reduce) {
+  body.login-page.auth-screen .login-card a,
+  body.login-page.auth-screen .login-card button,
+  body.login-page.auth-screen .login-card .form-check-input,
+  .dashboard-page .side-link,
+  .dashboard-page button { transition: none; }
+}
