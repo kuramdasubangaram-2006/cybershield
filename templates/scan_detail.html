@@ -28,6 +28,7 @@
       {% elif scan.module == 'URL Scanner' and details.site_explanation %}A limited read-only request gathered public page metadata; JavaScript was not run, forms were not submitted, and linked files were not fetched.
       {% elif scan.module == 'URL Scanner' %}URL structure was checked locally; this older scan did not gather live website details.
       {% elif scan.module == 'File Analyzer' %}{{ details.analysis_scope or 'File metadata, signature, and printable strings were checked in memory; the file was not saved, executed, or antivirus-scanned.' }}
+      {% elif scan.module == 'Nessus Report' %}Nessus v2 report imported. The source file was not saved; the listed scan findings have not been independently verified.
       {% elif scan.module == 'Log Analysis' %}Common event phrases and visible timestamps were summarized. The original pasted text was not saved; recognized event fields such as source/destination IPs, ports, protocol, and CVE/CVSS text were saved for this report.
       {% endif %}
     </p>
@@ -38,6 +39,39 @@
     </div>
   </section>
 
+  {% if details.nessus_findings %}
+    <section class="content-panel">
+      <div class="panel-heading"><div><h3>Nessus findings</h3><p>Plugin evidence and severity values imported from {{ details.nessus_report_name }}. This page does not represent a new scan.</p></div></div>
+      <div class="nessus-severity-bars" role="img" aria-label="Nessus findings by imported severity">
+        {% for severity, count in details.nessus_counts.items() %}
+          <div class="nessus-severity-row"><span>{{ severity }}</span><span class="nessus-severity-track"><span class="nessus-bar-{{ severity|lower }}" style="width: {{ (count * 100 / details.nessus_total_items)|round(1) }}%"></span></span><strong>{{ count }}</strong></div>
+        {% endfor %}
+      </div>
+      <div class="table-responsive"><table class="table table-sm align-middle">
+        <thead><tr><th>Plugin / finding</th><th>Asset</th><th>Port / service</th><th>Severity</th><th>CVE / CVSS</th></tr></thead>
+        <tbody>{% for finding in details.nessus_findings %}
+          <tr><td>{{ finding.plugin_name }}<br><small>Plugin {{ finding.plugin_id }} · {{ finding.plugin_family }}</small></td>
+            <td>{{ finding.asset }}<br><code>{{ finding.asset_ip }}</code><br><small>{{ finding.operating_system }}</small></td>
+            <td>{{ finding.port }}/{{ finding.protocol }}<br><small>{{ finding.service }}</small></td>
+            <td>{{ finding.severity }}<br><small>{{ finding.risk_factor }}</small></td>
+            <td>{{ finding.cves|join(', ') if finding.cves else 'No CVE listed' }}<br><small>CVSS 3.x source: {{ finding.cvss3_score_reported }}<br>Calculated v3.1: {{ finding.cvss3_score_calculated }} ({{ finding.cvss3_severity_calculated }})<br>CVSS 4 source: {{ finding.cvss4_score_reported }}</small></td>
+          </tr>
+          <tr><td colspan="5"><details><summary>Plugin evidence and remediation</summary>
+            <p><strong>Synopsis:</strong> {{ finding.synopsis }}</p><p><strong>Description:</strong> {{ finding.description }}</p><p><strong>Solution:</strong> {{ finding.solution }}</p>
+            <p><strong>CVSS v3 vector:</strong> <code>{{ finding.cvss3_vector }}</code><br>{{ finding.cvss3_note }}</p>
+            <p><strong>CVSS v3 temporal source score/vector:</strong> {{ finding.cvss3_temporal_score }} · <code>{{ finding.cvss3_temporal_vector }}</code></p>
+            <p><strong>CVSS v2 source:</strong> {{ finding.cvss2_score }} · <code>{{ finding.cvss2_vector }}</code><br><strong>CVSS v2 temporal source:</strong> {{ finding.cvss2_temporal_score }} · <code>{{ finding.cvss2_temporal_vector }}</code><br><strong>CVSS v4 source:</strong> {{ finding.cvss4_score_reported }} · <code>{{ finding.cvss4_vector }}</code></p>
+            <p><strong>Plugin type/version:</strong> {{ finding.plugin_type }} · {{ finding.plugin_version }}<br><strong>Published/modified:</strong> {{ finding.plugin_publication_date }} · {{ finding.plugin_modification_date }}<br><strong>Patch publication:</strong> {{ finding.patch_publication_date }}<br><strong>Exploit available:</strong> {{ finding.exploit_available }}</p>
+            {% if finding.exploit_frameworks %}<p><strong>Exploit frameworks:</strong> {% for name, value in finding.exploit_frameworks.items() %}{{ name }}: {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}</p>{% endif %}
+            {% if finding.references %}<p><strong>References:</strong> {% for name, values in finding.references.items() %}{{ name }}: {{ values|join(', ') }}{% if not loop.last %}; {% endif %}{% endfor %}</p>{% endif %}
+            <pre class="log-line-excerpt">{{ finding.plugin_output }}</pre>
+          </details></td></tr>
+        {% endfor %}</tbody>
+      </table></div>
+      <p class="scanner-privacy-note">CVE and plugin results are displayed as imported. Only complete CVSS v3.1 vectors are recalculated; v2 and v4 values remain source-reported.</p>
+    </section>
+  {% endif %}
+
   {% if details.log_events %}
     <section class="content-panel">
       <div class="panel-heading"><div><h3>Parsed log events and network details</h3><p>Every non-empty input line is included. Unlabelled addresses are not guessed as source or destination. CVSS describes vulnerability severity, not the overall log activity risk.</p></div></div>
@@ -46,7 +80,7 @@
           <thead><tr><th>Line / time</th><th>Event / level</th><th>Source IP : port</th><th>Destination IP : port</th><th>Protocol</th><th>CVE / CVSS as written</th></tr></thead>
           <tbody>{% for event in details.log_events %}
             <tr>
-              <td>{{ event.line }}<br><small>{{ event.timestamp }}</small></td>
+              <td>{{ event.line }}<br><small>{{ event.timestamp }}<br>{{ event.timestamp_status }}</small></td>
               <td>{{ event.event }}<br><small>{{ event.severity }}</small></td>
               <td><code>{{ event.source_ip }}{% if event.source_port != 'Not present' %}:{{ event.source_port }}{% endif %}</code>{% if event.other_ips %}<br><small>Unattributed: {{ event.other_ips|join(', ') }}</small>{% endif %}</td>
               <td><code>{{ event.destination_ip }}{% if event.destination_port != 'Not present' %}:{{ event.destination_port }}{% endif %}</code></td>
@@ -91,8 +125,10 @@
   <section class="content-panel">
     <div class="panel-heading"><div><h3>How to read this risk level</h3><p>CyberShield uses local checks and cannot guarantee that an item is safe.</p></div></div>
     <p class="result-summary">
-      {% if scan.risk|risk_level == 'Normal' %}Normal means these checks found no configured warning. The item may still be risky because live reputation and antivirus checks were not performed.
+      {% if details.nessus_findings %}The overall level reflects the highest Nessus severity included in this import. It is a source scanner result, not an independent CyberShield verification.
+      {% elif scan.risk|risk_level == 'Normal' %}Normal means these checks found no configured warning. The item may still be risky because live reputation and antivirus checks were not performed.
       {% elif scan.risk|risk_level == 'Low' %}Low means one or more caution signs matched. Review the indicators and context before acting.
+      {% elif scan.risk|risk_level == 'Medium' %}Medium means the imported source scanner reported a medium-severity finding. Verify the asset and evidence in the original scanner.
       {% elif scan.risk|risk_level == 'High' and scan.module == 'Log Analysis' %}High means the supplied log contains a correlated authentication pattern needing prompt review. It is not proof of compromise.
       {% elif scan.risk|risk_level == 'High' and scan.module == 'URL Scanner' %}High is used here for a specific observed security issue, such as a password form served without HTTPS. It is not a verdict that the website is fake or malicious.
       {% elif scan.risk|risk_level == 'High' %}High means a stronger file warning pattern matched. Verify the file source and check it with trusted endpoint-security software; this result alone does not prove malware.

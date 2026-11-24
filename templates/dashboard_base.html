@@ -33,7 +33,7 @@
           <a class="side-link {% if request.endpoint == 'scan_ip' %}active{% endif %}" href="{{ url_for('scan_ip') }}"><span>⌕</span> IP Detection</a>
           <a class="side-link {% if request.endpoint == 'scan_url' %}active{% endif %}" href="{{ url_for('scan_url') }}"><span>↗</span> URL Scanner</a>
           <a class="side-link {% if request.endpoint == 'analyze_uploaded_file' %}active{% endif %}" href="{{ url_for('analyze_uploaded_file') }}"><span>▤</span> File Analyzer</a>
-          <a class="side-link {% if request.endpoint == 'analyze_log_text' %}active{% endif %}" href="{{ url_for('analyze_log_text') }}"><span>≋</span> Log Analysis</a>
+          <a class="side-link {% if request.endpoint == 'analyze_log_text' %}active{% endif %}" href="{{ url_for('analyze_log_text') }}"><span>≋</span> Log / Nessus Analysis</a>
           {% if current_user %}
             <a class="side-link {% if request.endpoint == 'alerts_history' %}active{% endif %}" href="{{ url_for('alerts_history') }}"><span>◷</span> Alerts &amp; History</a>
             <a class="side-link {% if request.endpoint in ['reports', 'download_report'] %}active{% endif %}" href="{{ url_for('reports') }}"><span>▧</span> Reports</a>

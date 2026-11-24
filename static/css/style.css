@@ -230,6 +230,7 @@ body.login-page {
 .risk-pill, .role-pill { display: inline-block; padding: 4px 7px; border-radius: 99px; background: rgba(132, 152, 176, 0.12); color: #b2c0d2; font-size: 0.61rem; font-weight: 700; text-transform: uppercase; }
 .risk-normal { background: rgba(66, 216, 164, 0.12); color: #8de8bf; }
 .risk-low { background: rgba(101, 164, 255, 0.12); color: #a8caff; }
+.risk-medium { background: rgba(197, 139, 255, 0.14); color: #dfbdff; }
 .risk-high { background: rgba(255, 183, 79, 0.14); color: #ffd084; }
 .risk-critical { background: rgba(255, 106, 106, 0.16); color: #ff9d9d; }
 .report-risk-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
@@ -1065,6 +1066,15 @@ body.login-page .account-switch a:hover { color: #b4efff; text-decoration: under
 .guest-limit-notice p { margin: 0 0 0.9rem; color: #bdcce0; }
 .guest-limit-notice .sign-in-button { display: inline-flex; text-decoration: none; }
 .guest-limit-notice .text-link { margin-left: 0.7rem; }
+.nessus-severity-bars { display: grid; gap: 9px; max-width: 680px; margin: 15px 0; }
+.nessus-severity-row { display: grid; grid-template-columns: 112px minmax(100px,1fr) 42px; align-items: center; gap: 10px; color: #b9c9de; font-size: .78rem; }
+.nessus-severity-track { height: 9px; overflow: hidden; border-radius: 99px; background: rgba(132,152,176,.16); }
+.nessus-severity-track > span { display: block; height: 100%; min-width: 2px; border-radius: inherit; }
+.nessus-bar-informational { background: #7f92aa; }
+.nessus-bar-low { background: #56bded; }
+.nessus-bar-medium { background: #b784f5; }
+.nessus-bar-high { background: #ffad4b; }
+.nessus-bar-critical { background: #fa5c76; }
 @media (max-width: 720px) {
   .guest-account-menu { gap: 0.5rem; }
   .guest-account-menu .guest-scan-counter { flex-basis: 100%; }

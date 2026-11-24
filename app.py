@@ -35,7 +35,7 @@ except ImportError:  # Keep local startup usable until dependencies are installe
     OAuth = None
 
 from database import INTEGRITY_ERRORS, close_db, get_db, init_db
-from detectors import analyze_file, analyze_ip, analyze_logs, analyze_url
+from detectors import analyze_file, analyze_ip, analyze_logs, analyze_nessus_report, analyze_url
 from site_inspector import inspect_public_site
 from pdf_reports import build_scan_pdf
 
@@ -46,13 +46,14 @@ GUEST_FREE_SCANS = 4
 
 
 def risk_level(value):
-    """Normalize current and older stored labels to the four-level display scale."""
+    """Normalize current and older stored labels to the display scale."""
     return {
         "informational": "Normal",
         "unverified": "Normal",
         "review": "Low",
         "normal": "Normal",
         "low": "Low",
+        "medium": "Medium",
         "high": "High",
         "critical": "Critical",
     }.get(str(value).lower(), str(value).title())
@@ -73,14 +74,14 @@ def dashboard_analytics(db, user_id=None):
         parameters,
     ).fetchall()
 
-    risk_counts = {label: 0 for label in ("Normal", "Low", "High", "Critical")}
+    risk_counts = {label: 0 for label in ("Normal", "Low", "Medium", "High", "Critical")}
     for row in risk_rows:
         label = risk_level(row["risk"])
         if label not in risk_counts:
             label = "Low"
         risk_counts[label] += row["count"]
     risk_total = sum(risk_counts.values())
-    risk_colors = {"Normal": "#34d399", "Low": "#55b8ff", "High": "#ffb84d", "Critical": "#ff5878"}
+    risk_colors = {"Normal": "#34d399", "Low": "#55b8ff", "Medium": "#c58bff", "High": "#ffb84d", "Critical": "#ff5878"}
     risk_data = [
         {"label": label, "count": count, "percent": round(count * 100 / risk_total, 1) if risk_total else 0, "color": risk_colors[label]}
         for label, count in risk_counts.items()
@@ -94,7 +95,7 @@ def dashboard_analytics(db, user_id=None):
             degrees = next_degrees
     risk_gradient = f"conic-gradient({', '.join(stops)})" if stops else ""
 
-    module_order = ("IP Detection", "URL Scanner", "File Analyzer", "Log Analysis")
+    module_order = ("IP Detection", "URL Scanner", "File Analyzer", "Log Analysis", "Nessus Report")
     module_counts = {name: 0 for name in module_order}
     for row in module_rows:
         name = row["module"]
@@ -131,7 +132,7 @@ def dashboard_analytics(db, user_id=None):
         item = daily[local_day]
         item["total"] += 1
         label = risk_level(row["risk"])
-        if label in {"Low", "High", "Critical"}:
+        if label in {"Low", "Medium", "High", "Critical"}:
             item["review"] += 1
         if label in {"High", "Critical"}:
             item["high"] += 1
@@ -176,6 +177,7 @@ def persisted_analysis_details(result):
     allowed = {
         "label", "explanation", "site_explanation", "redirect_chain", "indicators", "recommendations",
         "facts", "line_count", "counts", "event_categories", "log_events",
+        "nessus_report_name", "nessus_findings", "nessus_counts", "nessus_total_items",
         "file_type", "size", "sha256", "findings", "analysis_scope",
     }
     return {key: value for key, value in result.items() if key in allowed}
@@ -736,7 +738,9 @@ def create_app():
     def analyze_log_text():
         result = None
         submitted_text = ""
+        nessus_content = None
         rate_limited = False
+        input_valid = True
         if request.method == "POST":
             if not validate_csrf():
                 abort(400)
@@ -744,15 +748,29 @@ def create_app():
             uploaded = request.files.get("log_file")
             has_upload = uploaded is not None and bool(uploaded.filename)
             if has_upload and submitted_text.strip():
+                input_valid = False
                 flash("Paste logs or upload one log file, not both.", "error")
             elif has_upload:
                 from pathlib import Path
 
-                if Path(uploaded.filename).suffix.lower() not in {".log", ".txt", ".json", ".jsonl", ".csv"}:
-                    flash("Choose a .log, .txt, .json, .jsonl, or .csv text file.", "error")
+                suffix = Path(uploaded.filename).suffix.lower()
+                if suffix == ".nessus":
+                    nessus_content = uploaded.stream.read(5 * 1024 * 1024 + 1)
+                    if len(nessus_content) > 5 * 1024 * 1024:
+                        input_valid = False
+                        nessus_content = None
+                        flash("Nessus report is too large. Maximum size is 5 MB.", "error")
+                    elif not nessus_content.strip():
+                        input_valid = False
+                        nessus_content = None
+                        flash("The selected Nessus report is empty.", "error")
+                elif suffix not in {".log", ".txt", ".json", ".jsonl", ".csv"}:
+                    input_valid = False
+                    flash("Choose a .nessus, .log, .txt, .json, .jsonl, or .csv file.", "error")
                 else:
                     raw_log = uploaded.stream.read(80001)
                     if len(raw_log) > 80000:
+                        input_valid = False
                         flash("Log file is too large. Maximum size is 20,000 text characters.", "error")
                     else:
                         try:
@@ -762,23 +780,30 @@ def create_app():
                             if not submitted_text.strip():
                                 flash("The selected log file is empty. Choose a file with log lines.", "error")
                                 submitted_text = ""
+                                input_valid = False
                         except UnicodeDecodeError:
+                            input_valid = False
                             flash("Could not read this file as UTF-8 text. Save it as UTF-8 and try again.", "error")
                         except ValueError as error:
+                            input_valid = False
                             flash(str(error), "error")
             user = get_current_user()
-            if submitted_text.strip() and user is None and guest_scans_remaining() == 0:
+            scan_submitted = input_valid and (bool(submitted_text.strip()) or nessus_content is not None)
+            if scan_submitted and user is None and guest_scans_remaining() == 0:
                 rate_limited = True
                 submitted_text = ""
+                nessus_content = None
                 flash("You have used all 4 free scans. Sign in or create an account to continue scanning.", "error")
-            elif submitted_text.strip() and user is not None and scan_rate_limited(user["id"]):
+            elif scan_submitted and user is not None and scan_rate_limited(user["id"]):
                 rate_limited = True
                 submitted_text = ""
+                nessus_content = None
                 flash("Scan limit reached. Please wait until the next minute before scanning again.", "error")
-            elif submitted_text.strip():
+            elif scan_submitted:
                 try:
-                    result = analyze_logs(submitted_text)
+                    result = analyze_nessus_report(nessus_content) if nessus_content is not None else analyze_logs(submitted_text)
                 except ValueError as error:
+                    nessus_content = None
                     flash(str(error), "error")
                 else:
                     if user is None:
@@ -788,7 +813,7 @@ def create_app():
                         scan_cursor = db.execute(
                             "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
                             "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-                            (user["id"], "Log Analysis", result["target"], result["risk"],
+                            (user["id"], result.get("module", "Log Analysis"), result["target"], result["risk"],
                              result["summary"], json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
                         )
                         db.commit()
@@ -797,7 +822,7 @@ def create_app():
 
         return render_template(
             "log_analysis.html",
-            page_title="Log Analysis",
+            page_title="Log / Nessus Analysis",
             result=result,
             submitted_text=submitted_text,
         ), 429 if rate_limited else 200
@@ -818,7 +843,7 @@ def create_app():
                 "FROM scans WHERE user_id = ? AND user_hidden_at IS NULL ORDER BY id DESC",
                 (user["id"],),
             ).fetchall()
-        review_items = [scan for scan in scans if risk_level(scan["risk"]) in {"Low", "High", "Critical"}]
+        review_items = [scan for scan in scans if risk_level(scan["risk"]) in {"Low", "Medium", "High", "Critical"}]
         return render_template(
             "alerts_history.html",
             page_title="Alerts & History",
@@ -958,7 +983,7 @@ def create_app():
             module_counts[scan["module"]] = module_counts.get(scan["module"], 0) + 1
         risk_counts = {
             level: sum(risk_level(scan["risk"]) == level for scan in scans)
-            for level in ("Normal", "Low", "High", "Critical")
+            for level in ("Normal", "Low", "Medium", "High", "Critical")
         }
         return render_template(
             "reports.html",

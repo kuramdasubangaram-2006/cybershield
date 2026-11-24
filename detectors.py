@@ -6,6 +6,7 @@ import io
 import json
 import math
 import re
+import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter
 from datetime import datetime, timezone
@@ -181,9 +182,8 @@ def analyze_url(value):
     strong_indicators = []
     caution_indicators = []
 
-    if not has_scheme:
-        caution_indicators.append("The scheme was omitted; HTTPS was assumed for parsing.")
-    elif parsed.scheme.lower() != "https":
+    scheme_assumption = "The input omitted a URL scheme; HTTPS was assumed only to parse the address. This alone is not a risk indicator."
+    if has_scheme and parsed.scheme.lower() != "https":
         caution_indicators.append("The URL does not use HTTPS.")
 
     if parsed.username is not None or parsed.password is not None:
@@ -223,6 +223,9 @@ def analyze_url(value):
         recommendations = ["Confirm the website address independently before signing in or sharing sensitive information."]
         explanation = "The local structure check did not find its configured warning signs. CyberShield did not open the site, check its ownership, or compare it with live threat reports, so this is not a safety verdict."
 
+    if not has_scheme:
+        indicators.append(scheme_assumption)
+
     return {
         "label": label,
         "risk": risk,
@@ -233,6 +236,7 @@ def analyze_url(value):
         "facts": {
             "Hostname": host,
             "Scheme": parsed.scheme.lower(),
+            "Scheme supplied": "Yes" if has_scheme else "No — HTTPS assumed only for parsing",
             "HTTPS": "Yes" if parsed.scheme.lower() == "https" else "No",
             "Host is an IP address": "Yes" if host_is_ip else "No",
             "Subdomain levels": str(max(0, len(hostname_labels) - 2)),
@@ -752,36 +756,44 @@ def analyze_logs(value):
         severity_value = _log_field_value(parsed_fields, {"severity", "level", "log.level", "event.severity"})
 
         parsed_timestamp = None
+        timestamp_status = "Not present"
         timestamp_match = timestamp_pattern.search(line)
         syslog_match = None
         timestamp = None
         if timestamp_match:
+            parsed_timestamp = timestamp_match.group(0)
             try:
-                timestamp = datetime.fromisoformat(timestamp_match.group(0).replace("Z", "+00:00"))
+                timestamp = datetime.fromisoformat(parsed_timestamp.replace("Z", "+00:00"))
                 if timestamp.tzinfo is not None:
                     timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+                    timestamp_status = "Parsed; explicit offset normalized to UTC"
+                else:
+                    timestamp_status = "Parsed; timezone not supplied"
                 timestamped_lines += 1
             except ValueError:
                 timestamp = None
+                timestamp_status = "Invalid timestamp"
         else:
             syslog_match = syslog_timestamp_pattern.search(line)
             if syslog_match:
+                parsed_timestamp = syslog_match.group(0)
                 try:
                     # Syslog timestamps omit the year and timezone. Use a
                     # fixed leap year for within-sample time-window checks.
                     timestamp = datetime.strptime(
-                        f"2000 {syslog_match.group(1)} {syslog_match.group(2)} {syslog_match.group(3)}",
+                        f"2000 {parsed_timestamp}",
                         "%Y %b %d %H:%M:%S",
                     )
+                    timestamp_status = "Parsed; year and timezone not supplied"
                     timestamped_lines += 1
                 except ValueError:
                     timestamp = None
-        if timestamp_match:
-            parsed_timestamp = timestamp_match.group(0)
-        elif syslog_match:
-            parsed_timestamp = syslog_match.group(0)
-        else:
+                    timestamp_status = "Invalid syslog timestamp"
+        if parsed_timestamp is None:
             parsed_timestamp = _log_field_value(parsed_fields, {"@timestamp", "timestamp", "time", "event.created"})
+            if parsed_timestamp is not None:
+                timestamp_status = "Not parsed; unrecognized timestamp format"
+        parsed_timestamp = parsed_timestamp or "Not present"
 
         matched_categories = [name for name, pattern in event_patterns.items() if pattern.search(line)]
         cves = sorted({match.upper() for match in cve_pattern.findall(line)})
@@ -853,6 +865,7 @@ def analyze_logs(value):
         log_events.append({
             "line": line_number,
             "timestamp": parsed_timestamp or "Not present",
+            "timestamp_status": timestamp_status,
             "event": event_name,
                 "severity": (severity_match.group(1).upper() if severity_match else str(severity_value).upper() if severity_value else "Not specified"),
             "source_ip": source or "Not present",
@@ -1015,6 +1028,7 @@ def analyze_logs(value):
             "Failure sources followed by success": str(len(failures_then_success)),
             "Timestamped lines": str(timestamped_lines),
             "Log format coverage": f"Recognized timestamps on {timestamped_lines} of {len(lines)} lines",
+            "Timestamp interpretation": "Explicit UTC offsets are normalized to UTC; timestamps without a timezone are compared as if they share one timezone; syslog dates omit the year and timezone.",
             "Event category matches": str(sum(event_categories.values())),
             "Log lines with detailed records": str(len(log_events)),
             "Unique IP addresses observed": str(len({address for event in log_events for address in event["other_ips"]} | {event["source_ip"] for event in log_events if event["source_ip"] != "Not present"} | {event["destination_ip"] for event in log_events if event["destination_ip"] != "Not present"})),
@@ -1028,7 +1042,228 @@ def analyze_logs(value):
         "analysis_scope": (
             "Local log parsing only; every non-empty input line is represented in the report. The original unmodified text is not retained; a sanitized line excerpt and recognized structured fields are saved. "
             "Common password, token, cookie, authorization, and secret fields are redacted. "
-            "CVSS v3.1 Base is calculated only from a complete vector present in the input. CVSS v4 vectors and unscored CVE IDs are recorded but not assigned an invented score. "
+            "The report uses CVE identifiers and CVSS scores, vectors, and severity values found in the submitted logs. CVSS v3.1 Base is calculated only from a complete vector present in the input; CVSS v4 and unscored CVE IDs are recorded without inventing a score. "
+            "CVE validity, affected products, and supplied scanner evidence are not independently verified. "
             "No Nessus plugin scan, external CVE lookup, or live threat-intelligence query was performed."
         ),
+    }
+
+
+def analyze_nessus_report(content):
+    """Parse a bounded Nessus v2 export without treating it as a live rescan."""
+    if not isinstance(content, (bytes, bytearray)) or not content:
+        raise ValueError("Choose a non-empty Nessus .nessus report.")
+    if len(content) > 5 * 1024 * 1024:
+        raise ValueError("Nessus report is too large. Maximum size is 5 MB.")
+
+    try:
+        if content.startswith((b"\xff\xfe", b"\xfe\xff")):
+            xml_text = bytes(content).decode("utf-16")
+        else:
+            xml_text = bytes(content).decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise ValueError("Nessus report must be encoded as UTF-8 or UTF-16 XML.") from error
+    if re.search(r"<!\s*(?:DOCTYPE|ENTITY)\b", xml_text, re.IGNORECASE):
+        raise ValueError("Nessus reports with DTD or custom entity declarations are not supported.")
+    try:
+        root = ET.fromstring(bytes(content))
+    except ET.ParseError as error:
+        raise ValueError("The uploaded file is not valid Nessus XML.") from error
+    if root.tag.rsplit("}", 1)[-1] != "NessusClientData_v2":
+        raise ValueError("The XML root is not a Nessus v2 report.")
+
+    def child_text(node, name, default=""):
+        if node is None:
+            return default
+        for child in node:
+            if child.tag.rsplit("}", 1)[-1] == name:
+                return (child.text or "").strip()
+        return default
+
+    def source_score(node, name):
+        raw = child_text(node, name)
+        if not raw:
+            return "Not provided"
+        try:
+            numeric = float(raw)
+        except ValueError:
+            return f"Invalid source value: {raw[:80]}"
+        if not math.isfinite(numeric) or not 0 <= numeric <= 10:
+            return f"Invalid source value: {raw[:80]}"
+        return f"{numeric:.1f}"
+
+    def child_values(node, name, limit=40):
+        return [
+            (child.text or "").strip()[:500]
+            for child in node
+            if child.tag.rsplit("}", 1)[-1] == name and (child.text or "").strip()
+        ][:limit]
+
+    reports = [node for node in root.iter() if node.tag.rsplit("}", 1)[-1] == "Report"]
+    report_name = reports[0].get("name", "Nessus scan") if reports else "Nessus scan"
+    host_nodes = [node for node in root.iter() if node.tag.rsplit("}", 1)[-1] == "ReportHost"]
+    severity_labels = {0: "Informational", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
+    risk_labels = {0: "Normal", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
+    counts = {label: 0 for label in severity_labels.values()}
+    findings = []
+    assets = set()
+    highest_severity = 0
+    total_items = 0
+    score_mismatches = 0
+    max_findings = 1000
+    truncated = False
+
+    for host_node in host_nodes:
+        host_name = host_node.get("name", "Unknown asset")[:255]
+        assets.add(host_name)
+        properties = {}
+        for properties_node in host_node:
+            if properties_node.tag.rsplit("}", 1)[-1] == "HostProperties":
+                for tag in properties_node:
+                    if tag.tag.rsplit("}", 1)[-1] == "tag" and tag.get("name"):
+                        properties[tag.get("name", "").lower()] = (tag.text or "").strip()[:500]
+                break
+        asset_ip = properties.get("host-ip", "")
+        asset_name = properties.get("host-fqdn") or properties.get("host-rdns") or host_name
+        host_os = properties.get("operating-system", "")
+        for item in host_node:
+            if item.tag.rsplit("}", 1)[-1] != "ReportItem":
+                continue
+            total_items += 1
+            try:
+                scanner_severity = int(item.get("severity", ""))
+            except ValueError:
+                scanner_severity = None
+            if scanner_severity not in severity_labels:
+                severity = "Not specified"
+                scanner_risk = child_text(item, "risk_factor", "Not specified")[:80]
+            else:
+                severity = severity_labels[scanner_severity]
+                scanner_risk = child_text(item, "risk_factor", severity)[:80]
+                counts[severity] += 1
+                highest_severity = max(highest_severity, scanner_severity)
+            if len(findings) >= max_findings:
+                truncated = True
+                continue
+
+            cves = sorted({(tag.text or "").strip().upper() for tag in item if tag.tag.rsplit("}", 1)[-1] == "cve" and (tag.text or "").strip()})
+            cvss3_vector = child_text(item, "cvss3_vector") or child_text(item, "cvss3_vector_string")
+            cvss3_reported = source_score(item, "cvss3_base_score")
+            if cvss3_reported.startswith("Invalid source value:"):
+                cvss3_reported_for_math = ""
+            else:
+                cvss3_reported_for_math = cvss3_reported if cvss3_reported != "Not provided" else ""
+            calculated_cvss31 = calculate_cvss31_base_score(cvss3_vector) if cvss3_vector.startswith("CVSS:3.1/") else None
+            cvss3_note = ""
+            if calculated_cvss31 is not None:
+                cvss3_note = "CVSS v3.1 Base calculated from the vector included in this report; vector and finding were not independently verified."
+                if cvss3_reported.startswith("Invalid source value:"):
+                    cvss3_note += " The imported score field is invalid."
+                    score_mismatches += 1
+                elif cvss3_reported_for_math and abs(float(cvss3_reported_for_math) - calculated_cvss31) >= 0.1:
+                    cvss3_note += f" Imported score {cvss3_reported} differs from the locally calculated score."
+                    score_mismatches += 1
+            elif cvss3_vector:
+                cvss3_note = "Vector retained as reported; local Base calculation is only implemented for CVSS v3.1."
+            elif cvss3_reported.startswith("Invalid source value:"):
+                cvss3_note = f"{cvss3_reported} No complete CVSS v3.1 vector was supplied for recalculation."
+            elif cvss3_reported != "Not provided":
+                cvss3_note = "Score retained as reported; no complete CVSS v3.1 vector was supplied for recalculation."
+            else:
+                cvss3_note = "No CVSS v3.1 score or vector was supplied."
+
+            findings.append({
+                "plugin_id": item.get("pluginID", "Not provided")[:80],
+                "plugin_name": item.get("pluginName", "Unnamed Nessus finding")[:300],
+                "plugin_family": item.get("pluginFamily", "Not provided")[:200],
+                "severity": severity,
+                "severity_number": scanner_severity if scanner_severity in severity_labels else None,
+                "risk_factor": scanner_risk,
+                "asset": asset_name,
+                "asset_ip": asset_ip or "Not provided",
+                "operating_system": host_os or "Not provided",
+                "port": item.get("port", "0")[:20],
+                "protocol": item.get("protocol", "Not provided")[:40],
+                "service": item.get("svc_name", "Not provided")[:120],
+                "cves": cves,
+                "cvss2_score": source_score(item, "cvss_base_score"),
+                "cvss2_vector": child_text(item, "cvss_vector") or "Not provided",
+                "cvss2_temporal_score": source_score(item, "cvss_temporal_score"),
+                "cvss2_temporal_vector": child_text(item, "cvss_temporal_vector") or "Not provided",
+                "cvss3_score_reported": cvss3_reported or "Not provided",
+                "cvss3_vector": cvss3_vector or "Not provided",
+                "cvss3_temporal_score": source_score(item, "cvss3_temporal_score"),
+                "cvss3_temporal_vector": child_text(item, "cvss3_temporal_vector") or "Not provided",
+                "cvss3_score_calculated": f"{calculated_cvss31:.1f}" if calculated_cvss31 is not None else "Not calculated",
+                "cvss3_severity_calculated": cvss_severity(calculated_cvss31) if calculated_cvss31 is not None else "Not assigned",
+                "cvss3_note": cvss3_note,
+                "cvss4_score_reported": source_score(item, "cvss4_base_score"),
+                "cvss4_vector": child_text(item, "cvss4_vector") or "Not provided",
+                "plugin_type": child_text(item, "plugin_type", "Not provided")[:120],
+                "plugin_version": child_text(item, "plugin_version", "Not provided")[:120],
+                "plugin_publication_date": child_text(item, "plugin_publication_date", "Not provided")[:120],
+                "plugin_modification_date": child_text(item, "plugin_modification_date", "Not provided")[:120],
+                "patch_publication_date": child_text(item, "patch_publication_date", "Not provided")[:120],
+                "exploit_available": child_text(item, "exploit_available", "Not provided")[:80],
+                "exploit_frameworks": {
+                    name: child_text(item, name)[:300]
+                    for name in ("exploit_framework_metasploit", "exploit_framework_canvas", "exploit_framework_core")
+                    if child_text(item, name)
+                },
+                "references": {
+                    name: child_values(item, name)
+                    for name in ("cwe", "bid", "xref", "see_also", "cpe")
+                    if child_values(item, name)
+                },
+                "synopsis": child_text(item, "synopsis", "Not provided")[:1000],
+                "description": child_text(item, "description", "Not provided")[:5000],
+                "solution": child_text(item, "solution", "Not provided")[:3000],
+                "plugin_output": _sanitize_log_line(child_text(item, "plugin_output", "Not provided"))[:5000],
+            })
+
+    if not host_nodes:
+        raise ValueError("The Nessus report contains no scan hosts.")
+    if total_items == 0:
+        raise ValueError("The Nessus report contains no scan findings.")
+
+    worst = risk_labels.get(highest_severity, "Normal")
+    indicators = [
+        f"Imported {len(findings)} of {total_items} Nessus finding(s) across {len(assets)} asset(s).",
+        "Severity, plugin identifiers, CVEs, and supplied scores are shown as values from the uploaded Nessus report.",
+        "No new network scan, CVE database lookup, or independent verification was performed.",
+    ]
+    if truncated:
+        indicators.append(f"The report contained more than {max_findings} findings; only the first {max_findings} were included in the detailed result.")
+    if score_mismatches:
+        indicators.append(f"{score_mismatches} imported CVSS v3 score(s) differ from the local v3.1 calculation or contain invalid numeric values; compare each value and vector with its source report.")
+
+    report_name = _sanitize_log_line(report_name)[:300]
+    return {
+        "module": "Nessus Report",
+        "label": "Imported Nessus scan report",
+        "risk": worst,
+        "summary": f"Imported {len(findings)} of {total_items} Nessus finding(s) from {len(assets)} asset(s). Highest severity reported by Nessus: {severity_labels.get(highest_severity, 'Informational')}.",
+        "explanation": "This result summarizes the supplied Nessus export. It does not run a scan or independently confirm that a listed vulnerability affects the asset.",
+        "analysis_scope": "This report is generated from findings in the imported Nessus v2 XML, including its CVE identifiers, scanner severity, and CVSS v2/v3/v4 values and vectors. CVSS v3.1 Base is recalculated only when a complete v3.1 vector is present; other scores remain source-reported. CVEs, affected assets, and plugin evidence are not independently verified; no CVE lookup or new network scan was performed.",
+        "facts": {
+            "Source report": report_name,
+            "Assets reported": str(len(assets)),
+            "Findings in source": str(total_items),
+            "Detailed findings included": str(len(findings)),
+            "Informational findings": str(counts["Informational"]),
+            "Low findings": str(counts["Low"]),
+            "Medium findings": str(counts["Medium"]),
+            "High findings": str(counts["High"]),
+            "Critical findings": str(counts["Critical"]),
+            "CVSS v3.1 mismatches / invalid values": str(score_mismatches),
+            "CVSS validation": "CVSS v3.1 scores recalculated only from complete v3.1 vectors; other versions left as reported.",
+        },
+        "indicators": indicators,
+        "recommendations": ["Confirm each finding's asset, plugin output, and remediation status in the originating Nessus installation before acting."],
+        "nessus_report_name": report_name,
+        "nessus_findings": findings,
+        "nessus_counts": counts,
+        "nessus_total_items": total_items,
+        "counts": counts,
+        "target": f"Nessus report: {report_name}",
     }

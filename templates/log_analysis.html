@@ -1,19 +1,19 @@
 {% extends "dashboard_base.html" %}
 {% block content %}
   <section class="welcome-row">
-    <div><p class="eyebrow">ANALYSIS TOOL</p><h2>Log Analysis</h2><p>Count common security events and correlate repeated authentication activity by source and time.</p></div>
+    <div><p class="eyebrow">ANALYSIS TOOL</p><h2>Log &amp; Nessus Analysis</h2><p>Review security log events or import a Nessus scan report with its source findings.</p></div>
     <span class="panel-tag">LOCAL KEYWORD CHECKS</span>
   </section>
 
   <section class="content-panel scanner-panel">
-    <div class="panel-heading"><div><h3>Upload a log file or paste log lines</h3><p>Choose one method. Up to 1,000 lines or 20,000 characters per review.</p></div></div>
+    <div class="panel-heading"><div><h3>Upload a log or Nessus report, or paste log lines</h3><p>Text logs: up to 1,000 lines or 20,000 characters. Nessus XML: up to 5 MB.</p></div></div>
     {% if current_user is none and guest_scans_remaining == 0 %}
       <div class="guest-limit-notice"><strong>Your 4 free scans are used.</strong><p>Sign in or create an account to continue scanning and save your reports.</p><a class="sign-in-button" href="{{ url_for('register') }}">Create account</a> <a class="text-link" href="{{ url_for('login') }}">Sign in</a></div>
     {% else %}<form class="log-form" method="post" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label class="form-label" for="log_file">Choose a log file (.log, .txt, .json, .jsonl, .csv)</label>
-      <input class="form-control" id="log_file" name="log_file" type="file" accept=".log,.txt,.json,.jsonl,.csv,text/plain,application/json,text/csv">
-      <p class="form-help">File content is read for this analysis only; the original file is not saved.</p>
+      <label class="form-label" for="log_file">Choose a log file or Nessus report (.nessus)</label>
+      <input class="form-control" id="log_file" name="log_file" type="file" accept=".nessus,.log,.txt,.json,.jsonl,.csv,text/plain,application/json,text/csv,application/xml,text/xml">
+      <p class="form-help">The uploaded file is read for this analysis only and is not saved. {% if current_user %}Derived findings are stored with your account.{% else %}Guest results are temporary.{% endif %}</p>
       <label class="form-label mt-3" for="log_text">Or paste log text</label>
       <textarea class="form-control log-textarea" id="log_text" name="log_text" rows="9" maxlength="20000" placeholder="Paste log lines here…">{{ submitted_text }}</textarea>
       <button class="btn sign-in-button log-submit-button" type="submit">Analyze logs <span aria-hidden="true">→</span></button>
@@ -31,6 +31,42 @@
       <p class="result-summary">{{ result.summary }}</p>
       <p class="result-summary">{{ result.explanation }}</p>
       <p class="role-note left-note">{{ result.analysis_scope }}</p>
+      {% if result.nessus_findings %}
+        <div class="indicator-block">
+          <h4>Nessus source severity distribution</h4>
+          <p>Severity labels below come from the uploaded Nessus report. CyberShield did not run a network scan.</p>
+          <div class="nessus-severity-bars" role="img" aria-label="Nessus findings by imported severity">
+            {% for severity, count in result.nessus_counts.items() %}
+              <div class="nessus-severity-row"><span>{{ severity }}</span><span class="nessus-severity-track"><span class="nessus-bar-{{ severity|lower }}" style="width: {{ (count * 100 / result.nessus_total_items)|round(1) }}%"></span></span><strong>{{ count }}</strong></div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="indicator-block">
+          <h4>Imported plugin findings</h4>
+          <div class="table-responsive"><table class="table table-sm align-middle">
+            <thead><tr><th>Plugin / finding</th><th>Asset</th><th>Port / service</th><th>Source severity</th><th>CVE / CVSS</th></tr></thead>
+            <tbody>{% for finding in result.nessus_findings %}
+              <tr><td>{{ finding.plugin_name }}<br><small>Plugin {{ finding.plugin_id }} · {{ finding.plugin_family }}</small></td>
+                <td>{{ finding.asset }}<br><code>{{ finding.asset_ip }}</code><br><small>{{ finding.operating_system }}</small></td>
+                <td>{{ finding.port }}/{{ finding.protocol }}<br><small>{{ finding.service }}</small></td>
+                <td>{{ finding.severity }}<br><small>Risk factor: {{ finding.risk_factor }}</small></td>
+                <td>{{ finding.cves|join(', ') if finding.cves else 'No CVE listed' }}<br><small>CVSS 3.x source: {{ finding.cvss3_score_reported }}<br>Calculated v3.1: {{ finding.cvss3_score_calculated }} ({{ finding.cvss3_severity_calculated }})<br>CVSS 4 source: {{ finding.cvss4_score_reported }}</small></td>
+              </tr>
+              <tr><td colspan="5"><details><summary>Finding evidence and remediation</summary>
+                <p><strong>Synopsis:</strong> {{ finding.synopsis }}</p><p><strong>Description:</strong> {{ finding.description }}</p><p><strong>Solution:</strong> {{ finding.solution }}</p>
+                <p><strong>CVSS 3 vector:</strong> <code>{{ finding.cvss3_vector }}</code><br><strong>CVSS 3 calculation:</strong> {{ finding.cvss3_note }}</p>
+                <p><strong>CVSS 3 temporal source score/vector:</strong> {{ finding.cvss3_temporal_score }} · <code>{{ finding.cvss3_temporal_vector }}</code></p>
+                <p><strong>CVSS 2 source score/vector:</strong> {{ finding.cvss2_score }} · <code>{{ finding.cvss2_vector }}</code><br><strong>CVSS 2 temporal source score/vector:</strong> {{ finding.cvss2_temporal_score }} · <code>{{ finding.cvss2_temporal_vector }}</code><br><strong>CVSS 4 source score/vector:</strong> {{ finding.cvss4_score_reported }} · <code>{{ finding.cvss4_vector }}</code></p>
+                <p><strong>Plugin type/version:</strong> {{ finding.plugin_type }} · {{ finding.plugin_version }}<br><strong>Plugin published/modified:</strong> {{ finding.plugin_publication_date }} · {{ finding.plugin_modification_date }}<br><strong>Patch publication:</strong> {{ finding.patch_publication_date }}<br><strong>Exploit available:</strong> {{ finding.exploit_available }}</p>
+                {% if finding.exploit_frameworks %}<p><strong>Exploit frameworks:</strong> {% for name, value in finding.exploit_frameworks.items() %}{{ name }}: {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}</p>{% endif %}
+                {% if finding.references %}<p><strong>References:</strong> {% for name, values in finding.references.items() %}{{ name }}: {{ values|join(', ') }}{% if not loop.last %}; {% endif %}{% endfor %}</p>{% endif %}
+                <pre class="log-line-excerpt">{{ finding.plugin_output }}</pre>
+              </details></td></tr>
+            {% endfor %}</tbody>
+          </table></div>
+        </div>
+      {% endif %}
+      {% if not result.nessus_findings %}
       <div class="log-count-grid">
         <div><span>Lines reviewed</span><strong>{{ result.line_count }}</strong></div>
         <div><span>Authentication failures</span><strong>{{ result.counts.authentication_failures }}</strong></div>
@@ -80,6 +116,7 @@
             </table>
           </div>
         </div>
+      {% endif %}
       {% endif %}
       <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
       {% if result.scan_id %}<div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>{% else %}<p class="scanner-privacy-note">This guest result is temporary. Create an account to save future reports.</p>{% endif %}

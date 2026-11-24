@@ -7,10 +7,11 @@
 
   <section class="metric-grid report-risk-grid">
     <article class="metric-card"><span class="metric-icon cyan">▤</span><p>Total scans</p><strong>{{ scans|length }}</strong><small>Included in this report</small></article>
-    <article class="metric-card"><span class="metric-icon green">✓</span><p>Normal</p><strong>{{ risk_counts.Normal }}</strong><small>No local warning found; not a safety verdict</small></article>
-    <article class="metric-card"><span class="metric-icon blue">!</span><p>Low</p><strong>{{ risk_counts.Low }}</strong><small>Minor indicators need review</small></article>
-    <article class="metric-card"><span class="metric-icon amber">▲</span><p>High</p><strong>{{ risk_counts.High }}</strong><small>Strong warning indicators found</small></article>
-    <article class="metric-card"><span class="metric-icon amber">‼</span><p>Critical</p><strong>{{ risk_counts.Critical }}</strong><small>Reserved for confirmed severe findings</small></article>
+    <article class="metric-card"><span class="metric-icon green">✓</span><p>Normal</p><strong>{{ risk_counts.Normal }}</strong><small>No warning in limited checks; not a safety verdict</small></article>
+    <article class="metric-card"><span class="metric-icon blue">!</span><p>Low</p><strong>{{ risk_counts.Low }}</strong><small>Low-severity indicators need review</small></article>
+    <article class="metric-card"><span class="metric-icon amber">●</span><p>Medium</p><strong>{{ risk_counts.Medium }}</strong><small>Source scanner reports medium severity</small></article>
+    <article class="metric-card"><span class="metric-icon amber">▲</span><p>High</p><strong>{{ risk_counts.High }}</strong><small>High severity reported or strong indicator</small></article>
+    <article class="metric-card"><span class="metric-icon amber">‼</span><p>Critical</p><strong>{{ risk_counts.Critical }}</strong><small>Critical severity reported; verify source evidence</small></article>
   </section>
 
   <section class="content-panel">

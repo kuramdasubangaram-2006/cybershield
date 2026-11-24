@@ -23,11 +23,14 @@ def _pdf_text(value):
 
 def _severity_summary_chart(events):
     """Draw a compact chart of the severity labels present in submitted logs."""
-    labels = Counter(
-        str(event.get("severity") or "Not specified").upper()
-        for event in events
-    )
-    order = ["CRITICAL", "HIGH", "MEDIUM", "WARNING", "ERROR", "NOTICE", "INFO", "LOW", "DEBUG", "NOT SPECIFIED"]
+    if isinstance(events, dict):
+        labels = Counter({str(label).upper(): int(count) for label, count in events.items()})
+    else:
+        labels = Counter(
+            str(event.get("severity") or "Not specified").upper()
+            for event in events
+        )
+    order = ["CRITICAL", "HIGH", "MEDIUM", "WARNING", "ERROR", "NOTICE", "INFO", "LOW", "INFORMATIONAL", "DEBUG", "NOT SPECIFIED"]
     rows = sorted(labels.items(), key=lambda item: (order.index(item[0]) if item[0] in order else len(order), item[0]))
     width = 174 * mm
     row_height = 8 * mm
@@ -45,6 +48,7 @@ def _severity_summary_chart(events):
         "NOTICE": colors.HexColor("#247aa5"),
         "INFO": colors.HexColor("#34865a"),
         "LOW": colors.HexColor("#34865a"),
+        "INFORMATIONAL": colors.HexColor("#718397"),
         "DEBUG": colors.HexColor("#718397"),
         "NOT SPECIFIED": colors.HexColor("#718397"),
     }
@@ -135,6 +139,53 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
             f"{item.get('severity', 'Review')} — {item.get('name', 'Finding')}: {item.get('detail', '')}"
             for item in details["findings"] if isinstance(item, dict)
         ])
+    if details.get("nessus_findings"):
+        story.append(Paragraph("Nessus source severity distribution", heading_style))
+        story.append(_severity_summary_chart(details.get("nessus_counts") or {}))
+        story.append(paragraph("Counts and severities are imported from the uploaded Nessus report. CyberShield did not run a network scan or independently verify the listed findings.", small_style))
+        for index, finding in enumerate(details["nessus_findings"], start=1):
+            plugin_name = _pdf_text(finding.get("plugin_name", "Unnamed finding"))
+            plugin_id = _pdf_text(finding.get("plugin_id", "Not provided"))
+            story.append(Paragraph(f"Finding {index}: {escape(plugin_name)} (Plugin {escape(plugin_id)})", heading_style))
+            metadata = [
+                ("Source severity", finding.get("severity", "Not specified")),
+                ("Risk factor", finding.get("risk_factor", "Not specified")),
+                ("Asset / IP", f"{finding.get('asset', 'Not provided')} / {finding.get('asset_ip', 'Not provided')}"),
+                ("Operating system", finding.get("operating_system", "Not provided")),
+                ("Port / protocol / service", f"{finding.get('port', 'Not provided')} / {finding.get('protocol', 'Not provided')} / {finding.get('service', 'Not provided')}"),
+                ("Plugin family", finding.get("plugin_family", "Not provided")),
+                ("CVE IDs", ", ".join(finding.get("cves", [])) or "Not provided"),
+                ("CVSS v2 source score / vector", f"{finding.get('cvss2_score', 'Not provided')} / {finding.get('cvss2_vector', 'Not provided')}"),
+                ("CVSS v2 temporal source score / vector", f"{finding.get('cvss2_temporal_score', 'Not provided')} / {finding.get('cvss2_temporal_vector', 'Not provided')}"),
+                ("CVSS v3 source score / vector", f"{finding.get('cvss3_score_reported', 'Not provided')} / {finding.get('cvss3_vector', 'Not provided')}"),
+                ("CVSS v3.1 calculated score", f"{finding.get('cvss3_score_calculated', 'Not calculated')} ({finding.get('cvss3_severity_calculated', 'Not assigned')})"),
+                ("CVSS v3.1 calculation note", finding.get("cvss3_note", "Not provided")),
+                ("CVSS v3 temporal score / vector", f"{finding.get('cvss3_temporal_score', 'Not provided')} / {finding.get('cvss3_temporal_vector', 'Not provided')}"),
+                ("CVSS v4 source score / vector", f"{finding.get('cvss4_score_reported', 'Not provided')} / {finding.get('cvss4_vector', 'Not provided')}"),
+                ("Plugin type / version", f"{finding.get('plugin_type', 'Not provided')} / {finding.get('plugin_version', 'Not provided')}"),
+                ("Plugin published / modified", f"{finding.get('plugin_publication_date', 'Not provided')} / {finding.get('plugin_modification_date', 'Not provided')}"),
+                ("Patch publication date", finding.get("patch_publication_date", "Not provided")),
+                ("Exploit availability", finding.get("exploit_available", "Not provided")),
+                ("Exploit frameworks", "; ".join(f"{key}: {value}" for key, value in finding.get("exploit_frameworks", {}).items()) or "Not provided"),
+                ("References", "; ".join(f"{key}: {', '.join(value)}" for key, value in finding.get("references", {}).items()) or "Not provided"),
+            ]
+            detail_rows = [[paragraph(label, small_style), paragraph(value, small_style)] for label, value in metadata]
+            metadata_table = Table(detail_rows, colWidths=[48 * mm, 126 * mm], hAlign="LEFT")
+            metadata_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#edf4f7")),
+                ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd9df")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d8e3e8")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]))
+            story.append(metadata_table)
+            for label, key in (("Synopsis", "synopsis"), ("Description", "description"), ("Recommended solution", "solution"), ("Plugin output", "plugin_output")):
+                value = finding.get(key)
+                if value and value != "Not provided":
+                    story.append(Paragraph(f"<b>{label}:</b> {escape(_pdf_text(value)).replace(chr(10), '<br/>')}", small_style))
     if details.get("log_events"):
         events = details["log_events"]
         story.append(Paragraph("Severity labels in the submitted logs", heading_style))
@@ -170,7 +221,7 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
             else:
                 cvss_details = "CVE/CVSS: Not present"
             event_rows = [
-                [paragraph(f"Line {event.get('line', '?')} | {event.get('timestamp', 'Not present')}", small_style), paragraph(str(event.get("severity", "Not specified")), small_style)],
+                [paragraph(f"Line {event.get('line', '?')} | {event.get('timestamp', 'Not present')} | {event.get('timestamp_status', 'Timestamp not validated')}", small_style), paragraph(str(event.get("severity", "Not specified")), small_style)],
                 [paragraph(f"Event: {event.get('event', 'Event')}", body_style), ""],
                 [paragraph(f"Source: {source}", small_style), paragraph(f"Destination: {destination}", small_style)],
                 [paragraph(f"Protocol: {event.get('protocol', 'Not present')}", small_style), paragraph(f"Other IPs: {other_ips}", small_style)],
@@ -230,7 +281,8 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
         canvas.saveState()
         canvas.setFont("Helvetica", 8)
         canvas.setFillColor(colors.HexColor("#627786"))
-        canvas.drawString(18 * mm, 15 * mm, "Limited checks only; a Normal result does not prove safety.")
+        footer_text = "Imported scanner report; findings were not independently verified." if scan["module"] == "Nessus Report" else "Limited checks only; a Normal result does not prove safety."
+        canvas.drawString(18 * mm, 15 * mm, footer_text)
         canvas.drawString(18 * mm, 10 * mm, f"Generated {datetime.now(timezone.utc):%Y-%m-%d %H:%M UTC} | CyberShield")
         canvas.drawRightString(A4[0] - 18 * mm, 10 * mm, f"Page {document.page}")
         canvas.restoreState()
