@@ -1628,3 +1628,6 @@ body.login-page.auth-screen .login-card .form-control:hover {
 @media (max-width: 700px) {
   .dashboard-page .dashboard-sidebar { background: linear-gradient(90deg, rgba(77, 170, 230, .42), rgba(139, 112, 221, .42)); }
 }
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-page > .dashboard-background-video { display: block; }
+}
