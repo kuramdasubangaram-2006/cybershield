@@ -1137,7 +1137,7 @@ body.login-page.auth-screen .login-card {
   padding: clamp(25px, 4vw, 39px);
   border: 1px solid rgba(157, 226, 255, .5);
   border-radius: 23px;
-  background: rgba(5, 16, 37, .59);
+  background: rgba(5, 16, 37, .43);
   box-shadow: 0 25px 80px rgba(0, 0, 0, .4), 0 0 42px rgba(34, 170, 255, .16);
   backdrop-filter: blur(15px) saturate(145%);
   -webkit-backdrop-filter: blur(15px) saturate(145%);
@@ -1156,7 +1156,7 @@ body.login-page.auth-screen .login-card .form-label { color: #e4efff; }
 body.login-page.auth-screen .login-card .form-control {
   color: #f6f9ff;
   border-color: rgba(170, 207, 244, .33);
-  background: rgba(2, 12, 30, .56);
+  background: rgba(2, 12, 30, .38);
 }
 body.login-page.auth-screen .login-card .form-control::placeholder { color: #a5b5cc; }
 body.login-page.auth-screen .login-card .form-control:focus {
@@ -1172,7 +1172,7 @@ body.login-page.auth-screen .form-footer { margin-top: 10px; color: rgba(227, 24
 @media (max-width: 560px) {
   body.login-page.auth-screen .login-layout { min-height: 100svh; padding: 16px; }
   body.login-page.auth-screen .form-panel { width: min(100%, 470px); }
-  body.login-page.auth-screen .login-card { padding: 25px 21px; background: rgba(5, 16, 37, .72); }
+  body.login-page.auth-screen .login-card { padding: 25px 21px; background: rgba(5, 16, 37, .52); }
   body.login-page.auth-screen .form-heading { margin-bottom: 18px; }
   body.login-page.auth-screen .developer-credit { margin-top: 13px; }
 }
