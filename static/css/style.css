@@ -1177,13 +1177,14 @@ body.login-page.auth-screen .login-card .remember-row,
 body.login-page.auth-screen .login-card .remember-row .form-check-label { color: #e0ecfb; }
 body.login-page.auth-screen .sign-in-button {
   border: 1px solid rgba(186, 235, 255, .82);
-  background: transparent;
+  background: rgba(157, 220, 255, .12);
   color: #f5fbff;
   box-shadow: none;
+  transition: background-color .16s ease, border-color .16s ease;
 }
 body.login-page.auth-screen .sign-in-button:hover,
 body.login-page.auth-screen .sign-in-button:focus-visible {
-  background: rgba(255, 255, 255, .12);
+  background: rgba(190, 232, 255, .20);
   color: #ffffff;
   box-shadow: 0 0 0 2px rgba(124, 236, 255, .25);
 }
