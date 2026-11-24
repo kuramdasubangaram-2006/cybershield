@@ -1147,26 +1147,42 @@ body.login-page.auth-screen .mobile-brand {
   margin-bottom: 20px;
   color: #f6faff;
 }
+body.login-page.auth-screen .secure-label {
+  color: #7cecff;
+  text-shadow: 0 0 16px rgba(57, 218, 255, .35);
+}
 body.login-page.auth-screen .form-heading { margin-bottom: 23px; }
 body.login-page.auth-screen .form-heading h2 { color: #f5f8ff; }
 body.login-page.auth-screen .form-heading p,
 body.login-page.auth-screen .account-note,
-body.login-page.auth-screen .role-note { color: #c1d2e8; }
-body.login-page.auth-screen .login-card .form-label { color: #e4efff; }
+body.login-page.auth-screen .role-note { color: #d6e6fb; }
+body.login-page.auth-screen .login-card .form-label { color: #f1f7ff; }
+body.login-page.auth-screen .text-link,
+body.login-page.auth-screen .password-toggle { color: #80eaff; }
+body.login-page.auth-screen .account-switch,
+body.login-page.auth-screen .developer-credit { color: #d7e6f8; }
+body.login-page.auth-screen .developer-name { color: #63e5ff; }
+body.login-page.auth-screen .mentor-name { color: #c4a5ff; }
+body.login-page.auth-screen .account-switch a { color: #78e8ff; }
 body.login-page.auth-screen .login-card .form-control {
   color: #f6f9ff;
   border-color: rgba(170, 207, 244, .33);
   background: rgba(2, 12, 30, .12);
 }
-body.login-page.auth-screen .login-card .form-control::placeholder { color: #a5b5cc; }
+body.login-page.auth-screen .login-card .form-control::placeholder { color: #d0def2; }
 body.login-page.auth-screen .login-card .form-control:focus {
   border-color: #5fe5ff;
   background: rgba(2, 12, 30, .38);
   box-shadow: 0 0 0 3px rgba(62, 211, 255, .18), 0 0 20px rgba(62, 211, 255, .16);
 }
 body.login-page.auth-screen .login-card .remember-row,
-body.login-page.auth-screen .login-card .remember-row .form-check-label { color: #cbdaf0; }
-body.login-page.auth-screen .google-signin-button { background: rgba(7, 20, 43, .48); }
+body.login-page.auth-screen .login-card .remember-row .form-check-label { color: #e0ecfb; }
+body.login-page.auth-screen .google-signin-button {
+  border-color: rgba(111, 224, 255, .52);
+  background: rgba(6, 20, 48, .34);
+  color: #f5f9ff;
+}
+body.login-page.auth-screen .google-signin-wrap small { color: #d2e3f7; }
 body.login-page.auth-screen .developer-credit { margin-top: 17px; }
 body.login-page.auth-screen .form-footer { margin-top: 10px; color: rgba(227, 240, 255, .72); }
 @media (max-width: 560px) {
