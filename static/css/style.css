@@ -1357,3 +1357,131 @@ body.login-page.auth-screen .login-card .form-control:hover {
 @media (prefers-reduced-motion: reduce) {
   .dashboard-background-video { display: none; }
 }
+
+/* Light, translucent glass surfaces across the full dashboard. */
+.dashboard-page .dashboard-sidebar {
+  color: #172c50;
+  border-color: rgba(190, 229, 255, .78);
+  background: linear-gradient(180deg, rgba(176, 229, 250, .8), rgba(197, 190, 255, .76));
+  box-shadow: inset -1px 0 rgba(255, 255, 255, .35), 8px 0 30px rgba(7, 23, 55, .12);
+}
+.dashboard-page .dashboard-brand,
+.dashboard-page .dashboard-brand .brand-accent,
+.dashboard-page .dashboard-sidebar .brand-mark { color: #14628b; }
+.dashboard-page .sidebar-label,
+.dashboard-page .sidebar-bottom { color: #385477; }
+.dashboard-page .sidebar-bottom { border-color: rgba(44, 83, 130, .22); }
+.dashboard-page .side-link { color: #233c61; }
+.dashboard-page .side-link > span:first-child { color: #317bab; }
+.dashboard-page .side-link:hover,
+.dashboard-page .side-link.active,
+.dashboard-page .side-link:not(.disabled):focus-visible {
+  border-color: rgba(75, 155, 224, .45);
+  background: linear-gradient(90deg, rgba(97, 219, 235, .8), rgba(169, 143, 255, .78));
+  color: #142d50;
+  box-shadow: 0 5px 18px rgba(76, 121, 204, .18);
+}
+.dashboard-page .side-link.active > span:first-child { color: #165e94; }
+.dashboard-page .dashboard-topbar {
+  border-color: rgba(190, 220, 255, .48);
+  background: linear-gradient(100deg, rgba(194, 230, 255, .75), rgba(220, 207, 255, .7));
+}
+.dashboard-page .dashboard-topbar .eyebrow { color: #176d91; }
+.dashboard-page .dashboard-topbar h1,
+.dashboard-page .account-details strong { color: #172d50; }
+.dashboard-page .account-details small { color: #496283; }
+.dashboard-page .dashboard-content { color: #233955; }
+.dashboard-page .dashboard-content h2,
+.dashboard-page .dashboard-content h3,
+.dashboard-page .dashboard-content h4,
+.dashboard-page .welcome-row h2 { color: #172f53; }
+.dashboard-page .welcome-row .eyebrow { color: #147a9f; }
+.dashboard-page .welcome-row p:not(.eyebrow),
+.dashboard-page .dashboard-content .result-summary { color: #3f5879; }
+.dashboard-page .dashboard-content .content-panel,
+.dashboard-page .dashboard-content .content-panel.chart-panel,
+.dashboard-page .dashboard-content .module-preview {
+  border-color: rgba(187, 214, 248, .78);
+  background: rgba(219, 232, 255, .84);
+  box-shadow: 0 14px 32px rgba(25, 47, 90, .12), inset 0 1px rgba(255, 255, 255, .72);
+}
+.dashboard-page .dashboard-content .metric-users,
+.dashboard-page .dashboard-content .metric-scans {
+  border-color: rgba(71, 170, 235, .45);
+  background: linear-gradient(135deg, rgba(144, 215, 255, .86), rgba(177, 209, 255, .82));
+  color: #175d91;
+}
+.dashboard-page .dashboard-content .metric-alerts {
+  border-color: rgba(237, 117, 164, .4);
+  background: linear-gradient(135deg, rgba(255, 190, 213, .86), rgba(255, 211, 222, .82));
+  color: #9b315e;
+}
+.dashboard-page .dashboard-content .metric-privacy {
+  border-color: rgba(62, 190, 165, .42);
+  background: linear-gradient(135deg, rgba(157, 239, 220, .86), rgba(186, 241, 230, .82));
+  color: #176c61;
+}
+.dashboard-page .dashboard-content .metric-card:nth-child(3) {
+  border-color: rgba(147, 116, 230, .44);
+  background: linear-gradient(135deg, rgba(202, 181, 255, .86), rgba(219, 208, 255, .82));
+  color: #553e9a;
+}
+.dashboard-page .dashboard-content .metric-card p,
+.dashboard-page .dashboard-content .metric-card small,
+.dashboard-page .dashboard-content .panel-heading p,
+.dashboard-page .dashboard-content .chart-heading p,
+.dashboard-page .dashboard-content .chart-empty p,
+.dashboard-page .dashboard-content .data-table th,
+.dashboard-page .dashboard-content .module-chart-row,
+.dashboard-page .dashboard-content .form-label,
+.dashboard-page .dashboard-content .file-facts span { color: #3d5474; }
+.dashboard-page .dashboard-content .metric-card strong,
+.dashboard-page .dashboard-content .file-facts strong,
+.dashboard-page .dashboard-content .file-facts code { color: #152d50; }
+.dashboard-page .dashboard-content .data-table { color: #263d5d; }
+.dashboard-page .dashboard-content .data-table td { border-bottom-color: rgba(65, 94, 139, .16); }
+.dashboard-page .dashboard-content .chart-axis-label,
+.dashboard-page .dashboard-content .chart-day-label { fill: #536b8d; }
+.dashboard-page .dashboard-content .chart-gridline { stroke: rgba(67, 96, 142, .2); }
+.dashboard-page .dashboard-content .chart-legend,
+.dashboard-page .dashboard-content .risk-legend-row,
+.dashboard-page .dashboard-content .risk-legend-row strong { color: #304a6d; }
+.dashboard-page .dashboard-content .form-control,
+.dashboard-page .dashboard-content .form-select {
+  color: #203856;
+  border-color: rgba(100, 137, 190, .42);
+  background-color: rgba(239, 246, 255, .84);
+}
+.dashboard-page .dashboard-content .form-control::placeholder { color: #657b9b; }
+.dashboard-page .dashboard-content .risk-donut::before { background: #e0eaff; }
+.dashboard-page .dashboard-content .risk-donut-center strong { color: #183557; }
+.dashboard-page .dashboard-content .risk-donut-center span { color: #506887; }
+.dashboard-page .dashboard-content .scanner-panel,
+.dashboard-page .dashboard-content .result-panel { color: #263e5e; }
+.dashboard-page .dashboard-content .file-facts > div,
+.dashboard-page .dashboard-content .indicator-block {
+  border-color: rgba(112, 147, 193, .3);
+  background: rgba(219, 233, 255, .82);
+}
+.dashboard-page .dashboard-content .indicator-block h4 { color: #203a5c; }
+.dashboard-page .dashboard-content .panel-tag {
+  color: #17678f;
+  border-color: rgba(63, 144, 196, .34);
+  background: rgba(118, 213, 237, .25);
+}
+.dashboard-page .dashboard-content .scanner-disclaimer {
+  color: #75510e;
+  border-color: rgba(181, 131, 35, .36);
+  background: rgba(255, 232, 173, .78);
+}
+.dashboard-page .dashboard-content .scanner-disclaimer strong { color: #674400; }
+.dashboard-page .dashboard-topbar .sign-out-button { color: #155c85; }
+.dashboard-page .dashboard-topbar .sign-out-button:hover,
+.dashboard-page .dashboard-topbar .sign-out-button:focus-visible { color: #103d61; }
+.dashboard-page .dashboard-content a:hover,
+.dashboard-page .dashboard-content a:focus-visible { color: #145f9f; text-shadow: none; }
+.dashboard-page .side-link:not(.disabled):hover,
+.dashboard-page .side-link:not(.disabled):focus-visible { color: #142d50; }
+@media (max-width: 700px) {
+  .dashboard-page .dashboard-sidebar { background: linear-gradient(90deg, rgba(176, 229, 250, .9), rgba(197, 190, 255, .88)); }
+}
