@@ -1106,7 +1106,7 @@ body.auth-screen .auth-video-overlay {
   background:
     radial-gradient(ellipse at 20% 20%, rgba(0, 190, 255, .15), transparent 48%),
     radial-gradient(ellipse at 80% 85%, rgba(131, 55, 255, .18), transparent 50%),
-    linear-gradient(120deg, rgba(2, 8, 22, .25), rgba(3, 9, 25, .48));
+    linear-gradient(120deg, rgba(2, 8, 22, .10), rgba(3, 9, 25, .26));
 }
 body.login-page.auth-screen .login-layout {
   position: relative;
@@ -1137,10 +1137,10 @@ body.login-page.auth-screen .login-card {
   padding: clamp(25px, 4vw, 39px);
   border: 1px solid rgba(157, 226, 255, .5);
   border-radius: 23px;
-  background: rgba(5, 16, 37, .43);
+  background: rgba(5, 16, 37, .26);
   box-shadow: 0 25px 80px rgba(0, 0, 0, .4), 0 0 42px rgba(34, 170, 255, .16);
-  backdrop-filter: blur(15px) saturate(145%);
-  -webkit-backdrop-filter: blur(15px) saturate(145%);
+  backdrop-filter: blur(9px) saturate(130%);
+  -webkit-backdrop-filter: blur(9px) saturate(130%);
 }
 body.login-page.auth-screen .mobile-brand {
   display: inline-flex;
@@ -1156,12 +1156,12 @@ body.login-page.auth-screen .login-card .form-label { color: #e4efff; }
 body.login-page.auth-screen .login-card .form-control {
   color: #f6f9ff;
   border-color: rgba(170, 207, 244, .33);
-  background: rgba(2, 12, 30, .38);
+  background: rgba(2, 12, 30, .22);
 }
 body.login-page.auth-screen .login-card .form-control::placeholder { color: #a5b5cc; }
 body.login-page.auth-screen .login-card .form-control:focus {
   border-color: #5fe5ff;
-  background: rgba(2, 12, 30, .72);
+  background: rgba(2, 12, 30, .48);
   box-shadow: 0 0 0 3px rgba(62, 211, 255, .18), 0 0 20px rgba(62, 211, 255, .16);
 }
 body.login-page.auth-screen .login-card .remember-row,
@@ -1172,7 +1172,7 @@ body.login-page.auth-screen .form-footer { margin-top: 10px; color: rgba(227, 24
 @media (max-width: 560px) {
   body.login-page.auth-screen .login-layout { min-height: 100svh; padding: 16px; }
   body.login-page.auth-screen .form-panel { width: min(100%, 470px); }
-  body.login-page.auth-screen .login-card { padding: 25px 21px; background: rgba(5, 16, 37, .52); }
+  body.login-page.auth-screen .login-card { padding: 25px 21px; background: rgba(5, 16, 37, .32); }
   body.login-page.auth-screen .form-heading { margin-bottom: 18px; }
   body.login-page.auth-screen .developer-credit { margin-top: 13px; }
 }
