@@ -1631,3 +1631,31 @@ body.login-page.auth-screen .login-card .form-control:hover {
 @media (prefers-reduced-motion: reduce) {
   .dashboard-page > .dashboard-background-video { display: block; }
 }
+.dashboard-page .dashboard-sidebar {
+  background: linear-gradient(180deg, rgba(77, 170, 230, .4), rgba(139, 112, 221, .4));
+}
+.dashboard-page .sidebar-label,
+.dashboard-page .sidebar-bottom,
+.dashboard-page .side-link,
+.dashboard-page .dashboard-brand,
+.dashboard-page .dashboard-topbar :is(.eyebrow,h1,strong,small) {
+  text-shadow: 0 1px 4px rgba(2, 10, 28, .92);
+  -webkit-text-stroke: .18px rgba(2, 10, 28, .7);
+}
+.dashboard-page .dashboard-topbar {
+  background: linear-gradient(100deg, rgba(85, 170, 229, .38), rgba(139, 112, 221, .36));
+}
+.dashboard-page .dashboard-content :is(h2,h3,h4,p,small,label,span,td,th,strong,code) {
+  text-shadow: 0 1px 5px rgba(2, 10, 28, .95);
+  -webkit-text-stroke: .18px rgba(2, 10, 28, .72);
+}
+.dashboard-page .dashboard-content .content-panel,
+.dashboard-page .dashboard-content .content-panel.chart-panel,
+.dashboard-page .dashboard-content .module-preview {
+  background: rgba(115, 169, 225, .4);
+}
+.dashboard-page .dashboard-content .metric-users,
+.dashboard-page .dashboard-content .metric-scans { background: linear-gradient(135deg, rgba(67, 169, 238, .46), rgba(70, 113, 210, .42)); }
+.dashboard-page .dashboard-content .metric-alerts { background: linear-gradient(135deg, rgba(240, 91, 151, .44), rgba(173, 78, 177, .42)); }
+.dashboard-page .dashboard-content .metric-privacy { background: linear-gradient(135deg, rgba(45, 191, 161, .44), rgba(48, 142, 190, .42)); }
+.dashboard-page .dashboard-content .metric-card:nth-child(3) { background: linear-gradient(135deg, rgba(139, 98, 223, .48), rgba(77, 103, 196, .43)); }
