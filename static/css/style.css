@@ -1079,3 +1079,104 @@ body.login-page .account-switch a:hover { color: #b4efff; text-decoration: under
   .guest-account-menu { gap: 0.5rem; }
   .guest-account-menu .guest-scan-counter { flex-basis: 100%; }
 }
+
+/* Minimal glass sign-in screens over the supplied CyberShield motion background. */
+body.login-page.auth-screen {
+  position: relative;
+  min-height: 100vh;
+  overflow-x: hidden;
+  color: #f3f7ff;
+  background: radial-gradient(ellipse at 50% 45%, #104874 0%, #071329 62%, #030815 100%);
+}
+body.auth-screen .auth-background-video,
+body.auth-screen .auth-video-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+body.auth-screen .auth-background-video {
+  z-index: 0;
+  object-fit: cover;
+  object-position: center;
+}
+body.auth-screen .auth-video-overlay {
+  z-index: 1;
+  background:
+    radial-gradient(ellipse at 20% 20%, rgba(0, 190, 255, .15), transparent 48%),
+    radial-gradient(ellipse at 80% 85%, rgba(131, 55, 255, .18), transparent 50%),
+    linear-gradient(120deg, rgba(2, 8, 22, .25), rgba(3, 9, 25, .48));
+}
+body.login-page.auth-screen .login-layout {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: none;
+  min-height: 100vh;
+  margin: 0;
+  padding: 28px;
+}
+body.login-page.auth-screen .brand-panel { display: none !important; }
+body.login-page.auth-screen .form-panel {
+  width: min(100%, 470px);
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+body.login-page.auth-screen .login-card {
+  width: 100%;
+  padding: clamp(25px, 4vw, 39px);
+  border: 1px solid rgba(157, 226, 255, .5);
+  border-radius: 23px;
+  background: rgba(5, 16, 37, .59);
+  box-shadow: 0 25px 80px rgba(0, 0, 0, .4), 0 0 42px rgba(34, 170, 255, .16);
+  backdrop-filter: blur(15px) saturate(145%);
+  -webkit-backdrop-filter: blur(15px) saturate(145%);
+}
+body.login-page.auth-screen .mobile-brand {
+  display: inline-flex;
+  margin-bottom: 20px;
+  color: #f6faff;
+}
+body.login-page.auth-screen .form-heading { margin-bottom: 23px; }
+body.login-page.auth-screen .form-heading h2 { color: #f5f8ff; }
+body.login-page.auth-screen .form-heading p,
+body.login-page.auth-screen .account-note,
+body.login-page.auth-screen .role-note { color: #c1d2e8; }
+body.login-page.auth-screen .login-card .form-label { color: #e4efff; }
+body.login-page.auth-screen .login-card .form-control {
+  color: #f6f9ff;
+  border-color: rgba(170, 207, 244, .33);
+  background: rgba(2, 12, 30, .56);
+}
+body.login-page.auth-screen .login-card .form-control::placeholder { color: #a5b5cc; }
+body.login-page.auth-screen .login-card .form-control:focus {
+  border-color: #5fe5ff;
+  background: rgba(2, 12, 30, .72);
+  box-shadow: 0 0 0 3px rgba(62, 211, 255, .18), 0 0 20px rgba(62, 211, 255, .16);
+}
+body.login-page.auth-screen .login-card .remember-row,
+body.login-page.auth-screen .login-card .remember-row .form-check-label { color: #cbdaf0; }
+body.login-page.auth-screen .google-signin-button { background: rgba(7, 20, 43, .48); }
+body.login-page.auth-screen .developer-credit { margin-top: 17px; }
+body.login-page.auth-screen .form-footer { margin-top: 10px; color: rgba(227, 240, 255, .72); }
+@media (max-width: 560px) {
+  body.login-page.auth-screen .login-layout { min-height: 100svh; padding: 16px; }
+  body.login-page.auth-screen .form-panel { width: min(100%, 470px); }
+  body.login-page.auth-screen .login-card { padding: 25px 21px; background: rgba(5, 16, 37, .72); }
+  body.login-page.auth-screen .form-heading { margin-bottom: 18px; }
+  body.login-page.auth-screen .developer-credit { margin-top: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.auth-screen .auth-background-video { display: none; }
+  body.auth-screen .auth-video-overlay { background: radial-gradient(ellipse at 50% 30%, #114a72, #050a1c 78%); }
+}
