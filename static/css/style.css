@@ -1729,3 +1729,29 @@ body.login-page.auth-screen .login-card .form-control:hover {
   stroke: rgba(1, 8, 25, .85);
   stroke-width: 2px;
 }
+.dashboard-page .sidebar-label { color: #c8f6ff; }
+.dashboard-page .side-link { color: #ffffff; font-weight: 650; }
+.dashboard-page .side-link > span:first-child,
+.dashboard-page .dashboard-sidebar .brand-mark,
+.dashboard-page .dashboard-brand .brand-accent { color: #39e6ff; }
+.dashboard-page .side-link.active,
+.dashboard-page .side-link:hover,
+.dashboard-page .side-link:not(.disabled):focus-visible { color: #9af4ff; }
+.dashboard-page .dashboard-topbar .eyebrow,
+.dashboard-page .dashboard-content :is(h2, h3, h4) { color: #59eaff; }
+.dashboard-page .dashboard-content :is(h2, h3, h4, p, small, label, span, td, th, strong, code),
+.dashboard-page .dashboard-topbar :is(h1, strong, small) { color: #ffffff; }
+.dashboard-page .dashboard-brand,
+.dashboard-page .side-link,
+.dashboard-page .dashboard-topbar :is(h1, strong, small),
+.dashboard-page .dashboard-content :is(p, small, label, span, td, th, strong, code) { color: #e6efff; }
+.dashboard-page .dashboard-brand .brand-accent,
+.dashboard-page .dashboard-sidebar .brand-mark,
+.dashboard-page .side-link > span:first-child { color: #83dcff; }
+.dashboard-page .sidebar-label,
+.dashboard-page .dashboard-topbar .eyebrow { color: #91dfff; }
+.dashboard-page .side-link.active,
+.dashboard-page .side-link:hover,
+.dashboard-page .side-link:not(.disabled):focus-visible { color: #d5c4ff; }
+.dashboard-page .dashboard-content :is(h2, h3, h4) { color: #83dcff; }
+.dashboard-page .dashboard-content :is(.chart-axis-label, .chart-day-label) { fill: #e6efff; }
