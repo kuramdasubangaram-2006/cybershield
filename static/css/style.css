@@ -1100,13 +1100,14 @@ body.auth-screen .auth-background-video {
   z-index: 0;
   object-fit: cover;
   object-position: center;
+  filter: brightness(1.08) saturate(1.08);
 }
 body.auth-screen .auth-video-overlay {
   z-index: 1;
   background:
     radial-gradient(ellipse at 20% 20%, rgba(0, 190, 255, .15), transparent 48%),
     radial-gradient(ellipse at 80% 85%, rgba(131, 55, 255, .18), transparent 50%),
-    linear-gradient(120deg, rgba(2, 8, 22, .05), rgba(3, 9, 25, .18));
+    linear-gradient(120deg, rgba(2, 8, 22, .02), rgba(3, 9, 25, .06));
 }
 body.login-page.auth-screen .login-layout {
   position: relative;
@@ -1137,10 +1138,10 @@ body.login-page.auth-screen .login-card {
   padding: clamp(25px, 4vw, 39px);
   border: 1px solid rgba(157, 226, 255, .5);
   border-radius: 23px;
-  background: rgba(5, 16, 37, .18);
-  box-shadow: 0 25px 80px rgba(0, 0, 0, .4), 0 0 42px rgba(34, 170, 255, .16);
-  backdrop-filter: blur(6px) saturate(125%);
-  -webkit-backdrop-filter: blur(6px) saturate(125%);
+  background: rgba(5, 16, 37, .09);
+  box-shadow: 0 25px 80px rgba(0, 0, 0, .25), 0 0 42px rgba(34, 170, 255, .12);
+  backdrop-filter: blur(3px) saturate(118%);
+  -webkit-backdrop-filter: blur(3px) saturate(118%);
 }
 body.login-page.auth-screen .mobile-brand {
   display: inline-flex;
@@ -1167,7 +1168,7 @@ body.login-page.auth-screen .account-switch a { color: #78e8ff; }
 body.login-page.auth-screen .login-card .form-control {
   color: #f6f9ff;
   border-color: rgba(170, 207, 244, .33);
-  background: rgba(2, 12, 30, .12);
+  background: rgba(2, 12, 30, .07);
 }
 body.login-page.auth-screen .login-card .form-control::placeholder { color: #d0def2; }
 body.login-page.auth-screen .login-card .form-control:focus {
@@ -1179,7 +1180,7 @@ body.login-page.auth-screen .login-card .remember-row,
 body.login-page.auth-screen .login-card .remember-row .form-check-label { color: #e0ecfb; }
 body.login-page.auth-screen .google-signin-button {
   border-color: rgba(111, 224, 255, .52);
-  background: rgba(6, 20, 48, .34);
+  background: rgba(6, 20, 48, .18);
   color: #f5f9ff;
 }
 body.login-page.auth-screen .google-signin-wrap small { color: #d2e3f7; }
@@ -1188,7 +1189,7 @@ body.login-page.auth-screen .form-footer { margin-top: 10px; color: rgba(227, 24
 @media (max-width: 560px) {
   body.login-page.auth-screen .login-layout { min-height: 100svh; padding: 16px; }
   body.login-page.auth-screen .form-panel { width: min(100%, 470px); }
-  body.login-page.auth-screen .login-card { padding: 25px 21px; background: rgba(5, 16, 37, .24); }
+  body.login-page.auth-screen .login-card { padding: 25px 21px; background: rgba(5, 16, 37, .14); }
   body.login-page.auth-screen .form-heading { margin-bottom: 18px; }
   body.login-page.auth-screen .developer-credit { margin-top: 13px; }
 }
