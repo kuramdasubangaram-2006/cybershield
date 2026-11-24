@@ -1051,3 +1051,21 @@ body.login-page { color: #f1f5ff; background: radial-gradient(ellipse at 12% 22%
 body.login-page .account-switch { margin: 17px 0 0; color: #a9bad6; text-align: center; font-size: .92rem; }
 body.login-page .account-switch a { color: #54d8ff; font-weight: 700; text-decoration: none; }
 body.login-page .account-switch a:hover { color: #b4efff; text-decoration: underline; }
+.google-signin-wrap { margin-top: 13px; text-align: center; }
+.google-signin-button { display: flex; align-items: center; justify-content: center; gap: 11px; width: 100%; min-height: 48px; padding: 10px 14px; border: 1px solid rgba(132,160,207,.35); border-radius: 9px; background: rgba(255,255,255,.045); color: #eaf2ff; font: inherit; font-weight: 650; text-decoration: none; transition: background .16s ease,border-color .16s ease; }
+.google-signin-button:hover { border-color: rgba(115,211,244,.7); background: rgba(255,255,255,.09); color: #fff; }
+.google-signin-button:disabled { cursor: not-allowed; opacity: .74; }
+.google-g { display: inline-grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: #fff; color: #4285f4; font-family: Arial,sans-serif; font-size: 15px; font-weight: 800; }
+.google-signin-wrap small { display: block; margin-top: 7px; color: #93a7c8; font-size: .75rem; }
+/* Guest scan access and the four-scan account prompt. */
+.guest-account-menu { display: flex; align-items: center; gap: 0.85rem; flex-wrap: wrap; }
+.guest-scan-counter { display: inline-flex; align-items: center; width: fit-content; padding: 0.45rem 0.75rem; border: 1px solid rgba(85, 184, 255, 0.35); border-radius: 999px; color: #b9d9ff; background: rgba(27, 73, 126, 0.25); font-size: 0.85rem; }
+.guest-limit-notice { margin: 1rem 0; padding: 1.1rem; border: 1px solid rgba(85, 184, 255, 0.4); border-radius: 14px; background: rgba(30, 74, 130, 0.18); }
+.guest-limit-notice strong { display: block; margin-bottom: 0.35rem; }
+.guest-limit-notice p { margin: 0 0 0.9rem; color: #bdcce0; }
+.guest-limit-notice .sign-in-button { display: inline-flex; text-decoration: none; }
+.guest-limit-notice .text-link { margin-left: 0.7rem; }
+@media (max-width: 720px) {
+  .guest-account-menu { gap: 0.5rem; }
+  .guest-account-menu .guest-scan-counter { flex-basis: 100%; }
+}

@@ -6,18 +6,21 @@
   </section>
 
   <section class="content-panel scanner-panel">
-    <div class="panel-heading"><div><h3>Enter a value to review</h3><p>Your result is saved to your account history.</p></div></div>
+    <div class="panel-heading"><div><h3>Enter a value to review</h3><p>{% if current_user %}Your result is saved to your account history.{% else %}Guest results are temporary and are not saved to history.{% endif %}</p></div></div>
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% for category, message in messages %}<div class="form-alert form-alert-{{ category }}" role="alert">{{ message }}</div>{% endfor %}
     {% endwith %}
-    <form class="scanner-form" method="post">
+    {% if current_user is none and guest_scans_remaining == 0 %}
+      <div class="guest-limit-notice"><strong>Your 4 free scans are used.</strong><p>Sign in or create an account to continue scanning and save your reports.</p><a class="sign-in-button" href="{{ url_for('register') }}">Create account</a> <a class="text-link" href="{{ url_for('login') }}">Sign in</a></div>
+    {% else %}<form class="scanner-form" method="post">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label class="form-label" for="target">{% if module == 'IP Detection' %}IPv4 or IPv6 address{% else %}Website URL{% endif %}</label>
       <div class="scanner-input-row">
         <input class="form-control" id="target" name="target" type="text" value="{{ submitted_value }}" placeholder="{% if module == 'IP Detection' %}Example: 8.8.8.8{% else %}Example: https://example.com{% endif %}" required maxlength="{% if module == 'IP Detection' %}64{% else %}2048{% endif %}" autocomplete="off" spellcheck="false">
         <button class="btn sign-in-button scanner-button" type="submit">Analyze <span aria-hidden="true">→</span></button>
       </div>
-    </form>
+    </form>{% endif %}
+    {% if current_user is none and guest_scans_remaining > 0 %}<p class="guest-scan-counter">{{ guest_scans_remaining }} of 4 free scans left in this browser session</p>{% endif %}
     <p class="scanner-privacy-note"><span class="secure-dot"></span>{% if module == 'URL Scanner' %} A limited read-only request contacts the public website for page details; the site may log the request. CyberShield does not run scripts, submit forms, or fetch linked files.{% else %} This tool does not contact the IP address. It checks the input locally.{% endif %}</p>
   </section>
 
@@ -31,7 +34,7 @@
       <p class="result-summary">{{ result.summary }}</p>
       <p class="result-summary">{{ result.explanation }}</p>
       <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
-      <div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>
+      {% if result.scan_id %}<div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>{% else %}<p class="scanner-privacy-note">This guest result is temporary. Create an account to save future reports.</p>{% endif %}
     </section>
   {% endif %}
 

@@ -45,6 +45,8 @@ By default, local development uses SQLite in `instance/cybershield.sqlite3`. To 
 
 Forgot-password email delivery uses the Brevo transactional email API over HTTPS. Set `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` in the local `.env` or Render's private environment settings. Use a verified Brevo sender and keep the API key private; never commit it. Render's free web services block outbound SMTP ports, so SMTP credentials cannot be used from the free service. Existing hosted databases also need `supabase_password_reset.sql` run once before deploying the password-recovery update.
 
+Google sign-in uses OpenID Connect through Authlib. Create a Google OAuth client with the **Web application** type, add `https://cybershield-kb.onrender.com` as an authorized JavaScript origin and `https://cybershield-kb.onrender.com/auth/google/callback` as an authorized redirect URI, then add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to the Render service's private environment settings. Keep the secret private. The Google button stays disabled until both values are configured; a verified Google email signs into its matching account or creates a standard User account on first use.
+
 For an existing hosted CyberShield Supabase database, run `supabase_app_controls.sql` once in the SQL Editor before deploying updates. It creates the private admin activity and scan-limit tables.
 
 ## Hosted deployment

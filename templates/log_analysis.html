@@ -7,7 +7,9 @@
 
   <section class="content-panel scanner-panel">
     <div class="panel-heading"><div><h3>Upload a log file or paste log lines</h3><p>Choose one method. Up to 1,000 lines or 20,000 characters per review.</p></div></div>
-    <form class="log-form" method="post" enctype="multipart/form-data">
+    {% if current_user is none and guest_scans_remaining == 0 %}
+      <div class="guest-limit-notice"><strong>Your 4 free scans are used.</strong><p>Sign in or create an account to continue scanning and save your reports.</p><a class="sign-in-button" href="{{ url_for('register') }}">Create account</a> <a class="text-link" href="{{ url_for('login') }}">Sign in</a></div>
+    {% else %}<form class="log-form" method="post" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label class="form-label" for="log_file">Choose a log file (.log, .txt, .json, .jsonl, .csv)</label>
       <input class="form-control" id="log_file" name="log_file" type="file" accept=".log,.txt,.json,.jsonl,.csv,text/plain,application/json,text/csv">
@@ -15,8 +17,9 @@
       <label class="form-label mt-3" for="log_text">Or paste log text</label>
       <textarea class="form-control log-textarea" id="log_text" name="log_text" rows="9" maxlength="20000" placeholder="Paste log lines here…">{{ submitted_text }}</textarea>
       <button class="btn sign-in-button log-submit-button" type="submit">Analyze logs <span aria-hidden="true">→</span></button>
-    </form>
-    <p class="scanner-privacy-note"><span class="secure-dot"></span> The original unmodified text is not saved. Every non-empty line is represented by a sanitized excerpt and extracted fields in your account history. Common password, token, cookie, authorization, and secret values are redacted. Avoid pasting credentials or other highly sensitive data.</p>
+    </form>{% endif %}
+    {% if current_user is none and guest_scans_remaining > 0 %}<p class="guest-scan-counter">{{ guest_scans_remaining }} of 4 free scans left in this browser session</p>{% endif %}
+    <p class="scanner-privacy-note"><span class="secure-dot"></span> The original unmodified text is not saved. {% if current_user %}Sanitized excerpts and extracted fields are added to your account history.{% else %}Guest results are temporary and are not saved.{% endif %} Common password, token, cookie, authorization, and secret values are redacted. Avoid pasting credentials or other highly sensitive data.</p>
   </section>
 
   {% if result %}
@@ -79,7 +82,7 @@
         </div>
       {% endif %}
       <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
-      <div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>
+      {% if result.scan_id %}<div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>{% else %}<p class="scanner-privacy-note">This guest result is temporary. Create an account to save future reports.</p>{% endif %}
     </section>
   {% endif %}
 

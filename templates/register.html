@@ -75,6 +75,19 @@
             <button class="btn sign-in-button w-100" type="submit">Create account <span aria-hidden="true">→</span></button>
           </form>
 
+          <div class="google-signin-wrap">
+            {% if google_oauth_enabled %}
+              <a class="google-signin-button" href="{{ url_for('google_login') }}">
+                <span class="google-g" aria-hidden="true">G</span> Continue with Google
+              </a>
+            {% else %}
+              <button class="google-signin-button" type="button" disabled aria-describedby="google-signin-status">
+                <span class="google-g" aria-hidden="true">G</span> Continue with Google
+              </button>
+              <small id="google-signin-status">Google sign-in becomes available after its secure setup is added.</small>
+            {% endif %}
+          </div>
+
           <p class="account-switch">Already have an account? <a href="{{ url_for('login') }}">Sign in</a></p>
           <div class="developer-credit" aria-label="Project credits">
             <span>Developed by <a class="developer-name" href="https://www.linkedin.com/in/bangaram-kuramdasu" target="_blank" rel="noopener noreferrer">Bangarraju</a></span>

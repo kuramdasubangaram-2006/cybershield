@@ -39,8 +39,9 @@
             <h1 id="home-title">CyberShield KB</h1>
             <h2>Security activity, made easier to review.</h2>
             <p class="public-home-summary">Review suspicious files, URLs, IP addresses, and system logs with focused checks, clear findings, and downloadable reports.</p>
-            <a class="sign-in-button public-home-cta" href="{{ url_for('login') }}">Open CyberShield KB <span aria-hidden="true">→</span></a>
-            <p class="public-home-note">A security analysis workspace for authorized users. Sign in to access your account and saved reports.</p>
+            <a class="sign-in-button public-home-cta" href="{{ url_for('scan_ip') }}">Start 4 free scans <span aria-hidden="true">→</span></a>
+            <p class="public-home-note">Try four scans in this browser session without an account. Create an account or sign in to continue and save your reports.</p>
+            <a class="public-home-signin" href="{{ url_for('register') }}">Create account</a>
           </div>
 
           <section class="public-home-tools" aria-label="CyberShield KB tools">

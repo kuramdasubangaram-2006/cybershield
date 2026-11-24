@@ -100,6 +100,19 @@
             <button class="btn sign-in-button w-100" type="submit">Sign in <span aria-hidden="true">→</span></button>
           </form>
 
+          <div class="google-signin-wrap">
+            {% if google_oauth_enabled %}
+              <a class="google-signin-button" href="{{ url_for('google_login') }}">
+                <span class="google-g" aria-hidden="true">G</span> Continue with Google
+              </a>
+            {% else %}
+              <button class="google-signin-button" type="button" disabled aria-describedby="google-signin-status">
+                <span class="google-g" aria-hidden="true">G</span> Continue with Google
+              </button>
+              <small id="google-signin-status">Google sign-in becomes available after its secure setup is added.</small>
+            {% endif %}
+          </div>
+
           <p class="account-switch">New to CyberShield? <a href="{{ url_for('register') }}">Create account</a></p>
 
           <div class="developer-credit" aria-label="Project credits">

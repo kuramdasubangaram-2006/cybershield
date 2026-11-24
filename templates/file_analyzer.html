@@ -7,15 +7,18 @@
 
   <section class="content-panel scanner-panel">
     <div class="panel-heading"><div><h3>Choose a file to review</h3><p>Maximum file size: 5 MB. The file is not saved or executed.</p></div></div>
-    <form class="scanner-form" method="post" enctype="multipart/form-data">
+    {% if current_user is none and guest_scans_remaining == 0 %}
+      <div class="guest-limit-notice"><strong>Your 4 free scans are used.</strong><p>Sign in or create an account to continue scanning and save your reports.</p><a class="sign-in-button" href="{{ url_for('register') }}">Create account</a> <a class="text-link" href="{{ url_for('login') }}">Sign in</a></div>
+    {% else %}<form class="scanner-form" method="post" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label class="form-label" for="file">File</label>
       <div class="file-input-row">
         <input class="form-control" id="file" name="file" type="file" required>
         <button class="btn sign-in-button scanner-button" type="submit">Analyze <span aria-hidden="true">→</span></button>
       </div>
-    </form>
-    <p class="scanner-privacy-note"><span class="secure-dot"></span> The file itself is checked in memory and not saved. Its name, hash, type, size, and findings are added to your account history.</p>
+    </form>{% endif %}
+    {% if current_user is none and guest_scans_remaining > 0 %}<p class="guest-scan-counter">{{ guest_scans_remaining }} of 4 free scans left in this browser session</p>{% endif %}
+    <p class="scanner-privacy-note"><span class="secure-dot"></span> The file itself is checked in memory and not saved. {% if current_user %}Its name, hash, type, size, and findings are added to your account history.{% else %}Guest findings are temporary and are not saved.{% endif %}</p>
   </section>
 
   {% if result %}
@@ -37,7 +40,7 @@
         <div class="indicator-block"><h4>Detailed static findings</h4><ul>{% for finding in result.findings %}<li><strong>{{ finding.severity }} — {{ finding.name }}:</strong> {{ finding.detail }}</li>{% endfor %}</ul></div>
       {% endif %}
       <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
-      <div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>
+      {% if result.scan_id %}<div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>{% else %}<p class="scanner-privacy-note">This guest result is temporary. Create an account to save future reports.</p>{% endif %}
     </section>
   {% endif %}
 

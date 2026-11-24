@@ -29,6 +29,11 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
+try:
+    from authlib.integrations.flask_client import OAuth
+except ImportError:  # Keep local startup usable until dependencies are installed.
+    OAuth = None
+
 from database import INTEGRITY_ERRORS, close_db, get_db, init_db
 from detectors import analyze_file, analyze_ip, analyze_logs, analyze_url
 from site_inspector import inspect_public_site
@@ -37,6 +42,7 @@ from pdf_reports import build_scan_pdf
 
 load_dotenv()
 INDIA_TIMEZONE = timezone(timedelta(hours=5, minutes=30), name="IST")
+GUEST_FREE_SCANS = 4
 
 
 def risk_level(value):
@@ -212,6 +218,9 @@ def create_app():
         DATABASE_URL=os.getenv("DATABASE_URL", "").strip(),
         BREVO_API_KEY=os.getenv("BREVO_API_KEY", "").strip(),
         BREVO_SENDER_EMAIL=os.getenv("BREVO_SENDER_EMAIL", "").strip(),
+        GOOGLE_CLIENT_ID=os.getenv("GOOGLE_CLIENT_ID", "").strip(),
+        GOOGLE_CLIENT_SECRET=os.getenv("GOOGLE_CLIENT_SECRET", "").strip(),
+        GOOGLE_REDIRECT_URI=os.getenv("GOOGLE_REDIRECT_URI", "").strip(),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE", "0") == "1",
@@ -222,6 +231,17 @@ def create_app():
     init_db(app)
     app.jinja_env.filters["ist_datetime"] = ist_datetime
     app.jinja_env.filters["risk_level"] = risk_level
+
+    oauth = None
+    if OAuth is not None and app.config["GOOGLE_CLIENT_ID"] and app.config["GOOGLE_CLIENT_SECRET"]:
+        oauth = OAuth(app)
+        oauth.register(
+            name="google",
+            client_id=app.config["GOOGLE_CLIENT_ID"],
+            client_secret=app.config["GOOGLE_CLIENT_SECRET"],
+            server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+            client_kwargs={"scope": "openid email profile"},
+        )
 
     @app.after_request
     def add_security_headers(response):
@@ -247,7 +267,13 @@ def create_app():
 
     @app.context_processor
     def add_template_helpers():
-        return {"csrf_token": csrf_token, "current_user": get_current_user()}
+        user = get_current_user()
+        return {
+            "csrf_token": csrf_token,
+            "current_user": user,
+            "guest_scans_remaining": guest_scans_remaining() if user is None else None,
+            "google_oauth_enabled": oauth is not None,
+        }
 
     @app.get("/")
     def home():
@@ -255,7 +281,65 @@ def create_app():
             return redirect(url_for("setup"))
         user = get_current_user()
         if user is None:
-            return render_template("home.html")
+            return redirect(url_for("scan_ip"))
+        return redirect(url_for("dashboard"))
+
+    @app.get("/auth/google")
+    def google_login():
+        if not has_users():
+            return redirect(url_for("setup"))
+        if oauth is None:
+            flash("Google sign-in is not configured yet. You can use your email and password meanwhile.", "error")
+            return redirect(url_for("login"))
+        redirect_uri = app.config["GOOGLE_REDIRECT_URI"] or url_for("google_callback", _external=True, _scheme="https")
+        return oauth.google.authorize_redirect(redirect_uri)
+
+    @app.get("/auth/google/callback")
+    def google_callback():
+        if not has_users():
+            return redirect(url_for("setup"))
+        if oauth is None:
+            return redirect(url_for("login"))
+        try:
+            token = oauth.google.authorize_access_token()
+            profile = token.get("userinfo") or {}
+            email = str(profile.get("email", "")).strip().lower()
+            email_verified = profile.get("email_verified") is True or str(profile.get("email_verified", "")).lower() == "true"
+            if not profile.get("sub") or not email_verified or not valid_email(email):
+                flash("Google did not return a verified email address. Please sign in another way.", "error")
+                return redirect(url_for("login"))
+        except Exception:
+            current_app.logger.exception("Google sign-in could not be completed")
+            flash("Google sign-in could not be completed. Please try again or use your email and password.", "error")
+            return redirect(url_for("login"))
+
+        db = get_db()
+        user = db.execute(
+            "SELECT id, email, password_hash FROM users WHERE LOWER(email) = LOWER(?)", (email,)
+        ).fetchone()
+        if user is None:
+            try:
+                password_hash = generate_password_hash(secrets.token_urlsafe(48))
+                cursor = db.execute(
+                    "INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'user') RETURNING id",
+                    (email, password_hash),
+                )
+                user = {"id": cursor.fetchone()["id"], "email": email, "password_hash": password_hash}
+                db.commit()
+            except INTEGRITY_ERRORS:
+                db.rollback()
+                user = db.execute(
+                    "SELECT id, email, password_hash FROM users WHERE LOWER(email) = LOWER(?)", (email,)
+                ).fetchone()
+                if user is None:
+                    current_app.logger.exception("Google account creation conflicted but no account was found")
+                    flash("Account sign-in could not be completed. Please try again.", "error")
+                    return redirect(url_for("login"))
+
+        session.clear()
+        session["user_id"] = user["id"]
+        session["password_token"] = make_password_token(user["password_hash"])
+        session.permanent = True
         return redirect(url_for("dashboard"))
 
     @app.route("/setup", methods=["GET", "POST"])
@@ -583,7 +667,7 @@ def create_app():
         )
 
     @app.route("/tools/ip", methods=["GET", "POST"])
-    @login_required
+    @scan_access
     def scan_ip():
         return run_scan_page(
             module="IP Detection",
@@ -593,7 +677,7 @@ def create_app():
         )
 
     @app.route("/tools/url", methods=["GET", "POST"])
-    @login_required
+    @scan_access
     def scan_url():
         return run_scan_page(
             module="URL Scanner",
@@ -603,7 +687,7 @@ def create_app():
         )
 
     @app.route("/tools/file", methods=["GET", "POST"])
-    @login_required
+    @scan_access
     def analyze_uploaded_file():
         result = None
         rate_limited = False
@@ -613,7 +697,10 @@ def create_app():
             uploaded = request.files.get("file")
             if uploaded is None or not uploaded.filename:
                 flash("Choose a file to analyze.", "error")
-            elif scan_rate_limited(get_current_user()["id"]):
+            elif get_current_user() is None and guest_scans_remaining() == 0:
+                rate_limited = True
+                flash("You have used all 4 free scans. Sign in or create an account to continue scanning.", "error")
+            elif get_current_user() is not None and scan_rate_limited(get_current_user()["id"]):
                 rate_limited = True
                 flash("Scan limit reached. Please wait until the next minute before scanning again.", "error")
             else:
@@ -628,20 +715,24 @@ def create_app():
                     except ValueError as error:
                         flash(str(error), "error")
                     else:
-                        db = get_db()
-                        scan_cursor = db.execute(
-                            "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
-                            "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-                            (get_current_user()["id"], "File Analyzer", result["target"], result["risk"],
-                             result["summary"], json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
-                        )
-                        db.commit()
-                        result["scan_id"] = scan_cursor.fetchone()["id"]
+                        user = get_current_user()
+                        if user is None:
+                            record_guest_scan()
+                        else:
+                            db = get_db()
+                            scan_cursor = db.execute(
+                                "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
+                                "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+                                (user["id"], "File Analyzer", result["target"], result["risk"],
+                                 result["summary"], json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
+                            )
+                            db.commit()
+                            result["scan_id"] = scan_cursor.fetchone()["id"]
 
         return render_template("file_analyzer.html", page_title="File Analyzer", result=result), 429 if rate_limited else 200
 
     @app.route("/tools/logs", methods=["GET", "POST"])
-    @login_required
+    @scan_access
     def analyze_log_text():
         result = None
         submitted_text = ""
@@ -675,7 +766,12 @@ def create_app():
                             flash("Could not read this file as UTF-8 text. Save it as UTF-8 and try again.", "error")
                         except ValueError as error:
                             flash(str(error), "error")
-            if submitted_text.strip() and scan_rate_limited(get_current_user()["id"]):
+            user = get_current_user()
+            if submitted_text.strip() and user is None and guest_scans_remaining() == 0:
+                rate_limited = True
+                submitted_text = ""
+                flash("You have used all 4 free scans. Sign in or create an account to continue scanning.", "error")
+            elif submitted_text.strip() and user is not None and scan_rate_limited(user["id"]):
                 rate_limited = True
                 submitted_text = ""
                 flash("Scan limit reached. Please wait until the next minute before scanning again.", "error")
@@ -685,15 +781,18 @@ def create_app():
                 except ValueError as error:
                     flash(str(error), "error")
                 else:
-                    db = get_db()
-                    scan_cursor = db.execute(
-                        "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
-                        "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-                        (get_current_user()["id"], "Log Analysis", result["target"], result["risk"],
-                         result["summary"], json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
-                    )
-                    db.commit()
-                    result["scan_id"] = scan_cursor.fetchone()["id"]
+                    if user is None:
+                        record_guest_scan()
+                    else:
+                        db = get_db()
+                        scan_cursor = db.execute(
+                            "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
+                            "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+                            (user["id"], "Log Analysis", result["target"], result["risk"],
+                             result["summary"], json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
+                        )
+                        db.commit()
+                        result["scan_id"] = scan_cursor.fetchone()["id"]
                     submitted_text = ""
 
         return render_template(
@@ -1191,6 +1290,28 @@ def scan_rate_limited(user_id):
     return request_count > 5
 
 
+def guest_scans_remaining():
+    """Return the remaining guest scans for this signed browser session."""
+    try:
+        used = max(0, int(session.get("guest_scans_used", 0)))
+    except (TypeError, ValueError):
+        used = 0
+    return max(0, GUEST_FREE_SCANS - used)
+
+
+def record_guest_scan():
+    """Count a successfully completed, non-persisted guest scan."""
+    session["guest_scans_used"] = GUEST_FREE_SCANS - guest_scans_remaining() + 1
+
+
+def scan_access(view):
+    """Allow the scan pages to render for signed-in users and guests."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        return view(*args, **kwargs)
+    return wrapped
+
+
 def ist_datetime(value):
     """Format SQLite or PostgreSQL UTC timestamps as India Standard Time."""
     if not value:
@@ -1212,7 +1333,10 @@ def run_scan_page(module, page_title, description, analyzer):
         if not validate_csrf():
             abort(400)
         submitted_value = request.form.get("target", "").strip()
-        if submitted_value and scan_rate_limited(user["id"]):
+        if submitted_value and user is None and guest_scans_remaining() == 0:
+            rate_limited = True
+            flash("You have used all 4 free scans. Sign in or create an account to continue scanning.", "error")
+        elif submitted_value and user is not None and scan_rate_limited(user["id"]):
             rate_limited = True
             flash("Scan limit reached. Please wait until the next minute before scanning again.", "error")
         else:
@@ -1221,15 +1345,18 @@ def run_scan_page(module, page_title, description, analyzer):
             except ValueError as error:
                 flash(str(error), "error")
             else:
-                db = get_db()
-                scan_cursor = db.execute(
-                    "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
-                    "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-                    (user["id"], module, result["target"], result["risk"], result["summary"],
-                     json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
-                )
-                db.commit()
-                result["scan_id"] = scan_cursor.fetchone()["id"]
+                if user is None:
+                    record_guest_scan()
+                else:
+                    db = get_db()
+                    scan_cursor = db.execute(
+                        "INSERT INTO scans (user_id, module, target, risk, summary, analysis_details) "
+                        "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+                        (user["id"], module, result["target"], result["risk"], result["summary"],
+                         json.dumps(persisted_analysis_details(result), ensure_ascii=False)),
+                    )
+                    db.commit()
+                    result["scan_id"] = scan_cursor.fetchone()["id"]
 
     return render_template(
         "scanner.html",
