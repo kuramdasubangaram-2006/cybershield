@@ -1659,3 +1659,37 @@ body.login-page.auth-screen .login-card .form-control:hover {
 .dashboard-page .dashboard-content .metric-alerts { background: linear-gradient(135deg, rgba(240, 91, 151, .44), rgba(173, 78, 177, .42)); }
 .dashboard-page .dashboard-content .metric-privacy { background: linear-gradient(135deg, rgba(45, 191, 161, .44), rgba(48, 142, 190, .42)); }
 .dashboard-page .dashboard-content .metric-card:nth-child(3) { background: linear-gradient(135deg, rgba(139, 98, 223, .48), rgba(77, 103, 196, .43)); }
+
+/* Keep the HUD video clearly visible through the dashboard UI. */
+.dashboard-page .dashboard-shell,
+.dashboard-page .dashboard-main,
+.dashboard-page .dashboard-content { background: transparent; }
+.dashboard-page .dashboard-sidebar {
+  background: linear-gradient(180deg, rgba(77, 170, 230, .14), rgba(139, 112, 221, .14));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.dashboard-page .dashboard-topbar {
+  background: linear-gradient(100deg, rgba(50, 113, 177, .14), rgba(91, 74, 163, .14));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.dashboard-page .dashboard-content .content-panel,
+.dashboard-page .dashboard-content .content-panel.chart-panel,
+.dashboard-page .dashboard-content .module-preview {
+  background: rgba(35, 74, 125, .14);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.dashboard-page .dashboard-content .metric-users,
+.dashboard-page .dashboard-content .metric-scans { background: linear-gradient(135deg, rgba(67, 169, 238, .2), rgba(70, 113, 210, .18)); }
+.dashboard-page .dashboard-content .metric-alerts { background: linear-gradient(135deg, rgba(240, 91, 151, .2), rgba(173, 78, 177, .18)); }
+.dashboard-page .dashboard-content .metric-privacy { background: linear-gradient(135deg, rgba(45, 191, 161, .2), rgba(48, 142, 190, .18)); }
+.dashboard-page .dashboard-content .metric-card:nth-child(3) { background: linear-gradient(135deg, rgba(139, 98, 223, .22), rgba(77, 103, 196, .18)); }
+.dashboard-page .dashboard-content :is(.file-facts > div, .indicator-block) { background: rgba(35, 74, 125, .12); }
+.dashboard-page .side-link.active,
+.dashboard-page .side-link:hover,
+.dashboard-page .side-link:not(.disabled):focus-visible { background: rgba(64, 178, 228, .2); }
+@media (max-width: 700px) {
+  .dashboard-page .dashboard-sidebar { background: linear-gradient(90deg, rgba(77, 170, 230, .14), rgba(139, 112, 221, .14)); }
+}
