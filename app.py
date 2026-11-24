@@ -31,8 +31,10 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 try:
     from authlib.integrations.flask_client import OAuth
-except ImportError:  # Keep local startup usable until dependencies are installed.
+    _OAUTH_IMPORT_ERROR = None
+except ImportError as exc:  # Keep local startup usable until dependencies are installed.
     OAuth = None
+    _OAUTH_IMPORT_ERROR = str(exc)
 
 from database import INTEGRITY_ERRORS, close_db, get_db, init_db
 from detectors import analyze_file, analyze_ip, analyze_logs, analyze_nessus_report, analyze_url
@@ -235,8 +237,25 @@ def create_app():
     app.jinja_env.filters["risk_level"] = risk_level
 
     oauth = None
-    if OAuth is not None and app.config["GOOGLE_CLIENT_ID"] and app.config["GOOGLE_CLIENT_SECRET"]:
-        oauth = OAuth(app)
+    if OAuth is None:
+        app.logger.warning(
+            "Google OAuth disabled: Authlib could not be imported (%s)",
+            _OAUTH_IMPORT_ERROR or "unknown import error",
+        )
+    else:
+        missing_google_oauth = [
+            key
+            for key in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET")
+            if not app.config[key]
+        ]
+        if missing_google_oauth:
+            app.logger.warning(
+                "Google OAuth disabled: missing or empty environment variable(s): %s",
+                ", ".join(missing_google_oauth),
+            )
+        else:
+            oauth = OAuth(app)
+    if oauth is not None:
         oauth.register(
             name="google",
             client_id=app.config["GOOGLE_CLIENT_ID"],
