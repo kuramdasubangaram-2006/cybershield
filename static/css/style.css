@@ -1311,22 +1311,48 @@ body.login-page.auth-screen .login-card .form-control:hover {
   height: 100%;
   object-fit: cover;
   object-position: center;
-  opacity: .88;
+  opacity: .96;
   pointer-events: none;
 }
 .dashboard-main::before {
   background:
-    linear-gradient(120deg, rgba(5, 12, 29, .18), rgba(7, 11, 32, .2)),
+    linear-gradient(120deg, rgba(5, 12, 29, .1), rgba(7, 11, 32, .12)),
     repeating-linear-gradient(0deg, transparent 0 48px, rgba(88, 134, 225, .035) 49px),
     repeating-linear-gradient(90deg, transparent 0 48px, rgba(88, 134, 225, .035) 49px);
 }
 .dashboard-topbar {
-  background: rgba(9, 19, 43, .42);
+  background: rgba(9, 19, 43, .36);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
+.dashboard-content .metric-card,
+.dashboard-content .content-panel,
+.dashboard-content .module-preview {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.dashboard-content .metric-users,
+.dashboard-content .metric-scans {
+  background: linear-gradient(135deg, rgba(18, 92, 170, .91), rgba(13, 31, 68, .99) 72%);
+}
+.dashboard-content .metric-alerts {
+  background: linear-gradient(135deg, rgba(124, 39, 89, .91), rgba(43, 26, 60, .99) 72%);
+}
+.dashboard-content .metric-privacy {
+  background: linear-gradient(135deg, rgba(15, 108, 104, .9), rgba(12, 44, 61, .99) 72%);
+}
+.dashboard-content .metric-card p,
+.dashboard-content .metric-card small,
+.dashboard-content .panel-heading p:not(.eyebrow),
+.dashboard-content .chart-heading p,
+.dashboard-content .result-summary,
+.dashboard-content .chart-empty p,
+.dashboard-content .data-table th {
+  color: #d8e6fa;
+}
+.dashboard-content .data-table { color: #edf4ff; }
 @media (max-width: 700px) {
-  .dashboard-background-video { opacity: .76; }
+  .dashboard-background-video { opacity: .86; }
 }
 @media (prefers-reduced-motion: reduce) {
   .dashboard-background-video { display: none; }
