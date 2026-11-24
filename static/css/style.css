@@ -1492,7 +1492,7 @@ body.login-page.auth-screen .login-card .form-control:hover {
 .dashboard-page .dashboard-shell { position: relative; isolation: isolate; }
 .dashboard-page .dashboard-background-video {
   position: fixed;
-  z-index: -1;
+  z-index: 0;
   inset: 0;
   width: 100%;
   height: 100%;
@@ -1501,7 +1501,8 @@ body.login-page.auth-screen .login-card .form-control:hover {
   opacity: 1;
   pointer-events: none;
 }
-.dashboard-page .dashboard-main { background: transparent; }
+.dashboard-page .dashboard-sidebar { z-index: 1; }
+.dashboard-page .dashboard-main { position: relative; z-index: 1; background: transparent; }
 .dashboard-page .dashboard-main::before { background: none; }
 .dashboard-page .dashboard-main::after { opacity: .08; }
 .dashboard-page .dashboard-sidebar {
