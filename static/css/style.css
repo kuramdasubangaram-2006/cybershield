@@ -1489,8 +1489,8 @@ body.login-page.auth-screen .login-card .form-control:hover {
 }
 
 /* Show the motion background through every dashboard surface. */
-.dashboard-page .dashboard-shell { position: relative; isolation: isolate; }
-.dashboard-page .dashboard-background-video {
+.dashboard-page .dashboard-shell { position: relative; z-index: 1; isolation: isolate; }
+.dashboard-page > .dashboard-background-video {
   position: fixed;
   z-index: 0;
   inset: 0;
