@@ -1755,3 +1755,6 @@ body.login-page.auth-screen .login-card .form-control:hover {
 .dashboard-page .side-link:not(.disabled):focus-visible { color: #d5c4ff; }
 .dashboard-page .dashboard-content :is(h2, h3, h4) { color: #83dcff; }
 .dashboard-page .dashboard-content :is(.chart-axis-label, .chart-day-label) { fill: #e6efff; }
+.dashboard-page .dashboard-content :is(p, small, label, td),
+.dashboard-page .dashboard-topbar small,
+.dashboard-page .sidebar-bottom { font-weight: 500; }
