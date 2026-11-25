@@ -841,7 +841,7 @@ def create_app():
                 "SELECT id, last_seen_at FROM endpoint_agents WHERE revoked_at IS NULL"
             ).fetchall()
             rows = db.execute(
-                "SELECT events.id, events.event_time, events.event_name, events.source_ip, events.source_port, "
+                "SELECT events.id, events.event_time, events.event_id, events.event_name, events.source_ip, events.source_port, "
                 "events.destination_ip, events.destination_port, events.network_protocol, events.network_direction, "
                 "events.alert_level, events.alert_text, agents.name AS agent_name, users.email AS account_email "
                 "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
@@ -868,7 +868,7 @@ def create_app():
                 (user["id"],),
             ).fetchall()
             rows = db.execute(
-                "SELECT events.id, events.event_time, events.event_name, events.source_ip, events.source_port, "
+                "SELECT events.id, events.event_time, events.event_id, events.event_name, events.source_ip, events.source_port, "
                 "events.destination_ip, events.destination_port, events.network_protocol, events.network_direction, "
                 "events.alert_level, events.alert_text, agents.name AS agent_name "
                 "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
@@ -898,6 +898,7 @@ def create_app():
         for row in rows:
             item = {
                 "event_time": str(row["event_time"]),
+                "event_id": row["event_id"],
                 "event_name": row["event_name"],
                 "source_ip": row["source_ip"] or "Not present",
                 "source_port": row["source_port"],

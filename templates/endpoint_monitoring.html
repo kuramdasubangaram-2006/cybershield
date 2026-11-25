@@ -10,8 +10,8 @@
   </div>
   <div class="agent-live-status" data-agent-status role="status">Connecting to agent event feed…</div>
   <div class="table-responsive">
-    <table class="data-table"><thead><tr><th>Device</th>{% if current_user.role == 'admin' %}<th>Account</th>{% endif %}<th>Event</th><th>Source IP:port</th><th>Destination IP:port</th><th>Direction / protocol</th><th>Severity</th><th>Event time</th></tr></thead>
-      <tbody data-agent-events><tr><td colspan="8">Loading event feed…</td></tr></tbody>
+    <table class="data-table"><thead><tr><th>Device</th>{% if current_user.role == 'admin' %}<th>Account</th>{% endif %}<th>Event ID</th><th>Event</th><th>Source IP:port</th><th>Destination IP:port</th><th>Direction / protocol</th><th>Severity</th><th>Event time</th></tr></thead>
+      <tbody data-agent-events><tr><td colspan="{% if current_user.role == 'admin' %}9{% else %}8{% endif %}">Loading event feed…</td></tr></tbody>
     </table>
   </div>
   <p class="scanner-privacy-note">These are events reported by the paired agent and matched against CyberShield’s limited local rules. This is not a full antivirus or network-wide verdict.</p>

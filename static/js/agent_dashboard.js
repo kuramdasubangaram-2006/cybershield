@@ -37,6 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const row = document.createElement("tr");
       cell(row, event.agent_name);
       if (Object.hasOwn(event, "account_email")) cell(row, event.account_email);
+      cell(row, event.event_id);
       cell(row, event.event_name);
       cell(row, event.source_port ? `${event.source_ip}:${event.source_port}` : event.source_ip);
       cell(row, event.destination_port ? `${event.destination_ip}:${event.destination_port}` : event.destination_ip);
