@@ -1824,6 +1824,25 @@ body.login-page.auth-screen .login-card .form-control:hover {
   min-width: 1040px;
   table-layout: fixed;
 }
+.dashboard-page .dashboard-content .report-result .log-events-table {
+  --bs-table-color: #e3edfc;
+  --bs-table-bg: rgba(5, 14, 30, .34);
+  --bs-table-border-color: rgba(143, 174, 219, .2);
+  --bs-table-hover-color: #fff;
+  --bs-table-hover-bg: rgba(68, 142, 222, .12);
+  color: #e3edfc;
+  background: rgba(5, 14, 30, .34);
+}
+.dashboard-page .dashboard-content .report-result .log-events-table > :not(caption) > * > * {
+  color: #e3edfc;
+  background-color: transparent !important;
+  border-bottom-color: rgba(143, 174, 219, .2);
+  box-shadow: none;
+  vertical-align: top;
+}
+.dashboard-page .dashboard-content .report-result .log-events-table thead th { color: #b8d0ef; }
+.dashboard-page .dashboard-content .report-result .log-events-table td small { color: #b8cbe3; }
+.dashboard-page .dashboard-content .report-result .log-events-table td code { color: #c6efff; background: rgba(3, 12, 29, .56); }
 .dashboard-page .dashboard-content.scan-detail-page .log-events-table th:nth-child(1),
 .dashboard-page .dashboard-content .report-result .log-events-table th:nth-child(1) { width: 92px; }
 .dashboard-page .dashboard-content.scan-detail-page .log-events-table th:nth-child(2),
