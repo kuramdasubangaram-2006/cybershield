@@ -276,12 +276,26 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
         )
         if has_vulnerability_data:
             story.append(Paragraph("Mitigation", heading_style))
-            story.append(paragraph("Confirm the affected product/version and finding in the source scanner. If affected, follow the vendor advisory to patch; if delayed, restrict exposure or isolate the service where safe. Prioritize CVEs listed in CISA KEV.", small_style))
-            for label, url in (
-                ("NIST NVD: CVE details and vendor references", "https://nvd.nist.gov/vuln/"),
-                ("CISA: actively exploited CVEs", "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"),
-                ("CISA: response guidance", "https://www.cisa.gov/sites/default/files/publications/Federal_Government_Cybersecurity_Incident_and_Vulnerability_Response_Playbooks_508C.pdf"),
-            ):
+            log4shell_present = any(
+                "CVE-2021-44228" in (event.get("cves") or [])
+                for event in events
+            )
+            if log4shell_present:
+                story.append(paragraph("CVE-2021-44228 (Log4Shell): verify whether the affected application loads Apache log4j-core and confirm its runtime version. A log entry alone does not prove the application is vulnerable.", small_style))
+                story.append(paragraph("1. If an affected version is present, upgrade to a currently supported Log4j 2.x release that includes this and later security fixes; do not stop at 2.15.0.  2. Rebuild and redeploy affected services, verify the loaded JAR version, then rescan.  3. Until patched, restrict exposure or isolate the service where safe. If exploitation is suspected, preserve logs and follow incident response.", small_style))
+                source_links = (
+                    ("Apache Log4j security advisories", "https://logging.apache.org/security.html"),
+                    ("NIST NVD: CVE-2021-44228", "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"),
+                    ("CISA KEV catalog", "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"),
+                )
+            else:
+                story.append(paragraph("Confirm the affected product/version and finding in the source scanner; log text alone does not prove a system is vulnerable. If affected, follow the vendor advisory to patch, verify, and rescan. If patching is delayed, restrict exposure or isolate the service where safe. Prioritize CVEs in CISA KEV.", small_style))
+                source_links = (
+                    ("NIST NVD: CVE details and vendor references", "https://nvd.nist.gov/vuln/"),
+                    ("CISA: actively exploited CVEs", "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"),
+                    ("CISA: response guidance", "https://www.cisa.gov/sites/default/files/publications/Federal_Government_Cybersecurity_Incident_and_Vulnerability_Response_Playbooks_508C.pdf"),
+                )
+            for label, url in source_links:
                 story.append(Paragraph(f'- <link href="{escape(url)}" color="#087d91">{escape(label)}</link>', small_style))
     elif scan["module"] == "Log Analysis":
         add_section("Log detail availability", [

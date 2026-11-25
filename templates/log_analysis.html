@@ -142,19 +142,20 @@
           </div>
         </div>
       {% endif %}
-      {% set vuln_info = namespace(found=false) %}
-      {% for event in result.log_events %}{% if event.cves or event.cvss_as_reported != 'Not present' or event.cvss_vector_as_reported != 'Not present' %}{% set vuln_info.found = true %}{% endif %}{% endfor %}
+      {% set vuln_info = namespace(found=false, log4shell=false) %}
+      {% for event in result.log_events %}{% if event.cves or event.cvss_as_reported != 'Not present' or event.cvss_vector_as_reported != 'Not present' %}{% set vuln_info.found = true %}{% endif %}{% if 'CVE-2021-44228' in event.cves %}{% set vuln_info.log4shell = true %}{% endif %}{% endfor %}
       {% if result.log_events and vuln_info.found %}
         <div class="indicator-block mitigation-guidance">
           <h4>Mitigation</h4>
-          <p>First confirm the affected product/version and finding in the original scanner. Log text alone does not prove a system is vulnerable.</p>
-          <ol class="detail-list">
-            <li>If affected, follow the vendor advisory to patch or upgrade; then verify and rescan.</li>
-            <li>If patching is delayed, restrict exposure or isolate/disable the affected service where safe; track until fixed.</li>
-            <li>Prioritize CVEs in CISA’s Known Exploited Vulnerabilities catalog.</li>
-          </ol>
-          <div class="report-source-links"><a href="https://nvd.nist.gov/vuln/" target="_blank" rel="noopener noreferrer">NIST NVD: CVE details and vendor references</a><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" target="_blank" rel="noopener noreferrer">CISA: actively exploited CVEs</a><a href="https://www.cisa.gov/sites/default/files/publications/Federal_Government_Cybersecurity_Incident_and_Vulnerability_Response_Playbooks_508C.pdf" target="_blank" rel="noopener noreferrer">CISA: response guidance</a></div>
-          <p class="scanner-privacy-note">General guidance only. Use the affected product’s vendor advisory for the exact fix.</p>
+          {% if vuln_info.log4shell %}
+            <p><strong>CVE-2021-44228 (Log4Shell):</strong> verify whether the affected application actually loads Apache <code>log4j-core</code> and confirm its runtime version. The log entry alone does not prove the application is vulnerable.</p>
+            <ol class="detail-list"><li>If an affected version is present, upgrade to a currently supported Log4j 2.x release that includes this fix and later security fixes. Do not stop at 2.15.0; Apache documents a follow-up issue affecting some configurations.</li><li>Rebuild/redeploy all affected services, verify the loaded JAR version, then rescan.</li><li>Until patched, restrict network exposure or isolate the affected service. If exploitation is suspected, preserve logs and follow incident response.</li></ol>
+            <div class="report-source-links"><a href="https://logging.apache.org/security.html" target="_blank" rel="noopener noreferrer">Apache Log4j security advisories</a><a href="https://nvd.nist.gov/vuln/detail/CVE-2021-44228" target="_blank" rel="noopener noreferrer">NIST NVD: CVE-2021-44228</a><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" target="_blank" rel="noopener noreferrer">CISA KEV catalog</a></div>
+          {% else %}
+            <p>Confirm the affected product/version and finding in the original scanner. If affected, follow the vendor advisory to patch; if delayed, restrict exposure or isolate the service where safe. Prioritize CVEs listed in CISA KEV.</p>
+            <div class="report-source-links"><a href="https://nvd.nist.gov/vuln/" target="_blank" rel="noopener noreferrer">NIST NVD: CVE details and vendor references</a><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" target="_blank" rel="noopener noreferrer">CISA: actively exploited CVEs</a><a href="https://www.cisa.gov/sites/default/files/publications/Federal_Government_Cybersecurity_Incident_and_Vulnerability_Response_Playbooks_508C.pdf" target="_blank" rel="noopener noreferrer">CISA: response guidance</a></div>
+          {% endif %}
+          <p class="scanner-privacy-note">Verify the affected software and version before taking action; these logs do not prove the host is vulnerable.</p>
         </div>
       {% endif %}
       {% endif %}
