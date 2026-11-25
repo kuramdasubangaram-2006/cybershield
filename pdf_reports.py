@@ -31,7 +31,7 @@ def _severity_summary_chart(events):
             str(event.get("severity") or "Not specified").upper()
             for event in events
         )
-    order = ["CRITICAL", "HIGH", "MEDIUM", "WARNING", "ERROR", "NOTICE", "INFO", "LOW", "INFORMATIONAL", "NONE", "DEBUG", "NOT SPECIFIED"]
+    order = ["CRITICAL", "HIGH", "MEDIUM", "WARNING", "ERROR", "NOTICE", "INFO", "LOW", "INFORMATIONAL", "UNCLASSIFIED", "NONE", "DEBUG", "NOT SPECIFIED"]
     rows = sorted(labels.items(), key=lambda item: (order.index(item[0]) if item[0] in order else len(order), item[0]))
     width = 174 * mm
     row_height = 8 * mm
@@ -50,6 +50,7 @@ def _severity_summary_chart(events):
         "INFO": colors.HexColor("#34865a"),
         "LOW": colors.HexColor("#34865a"),
         "INFORMATIONAL": colors.HexColor("#718397"),
+        "UNCLASSIFIED": colors.HexColor("#718397"),
         "NONE": colors.HexColor("#718397"),
         "DEBUG": colors.HexColor("#718397"),
         "NOT SPECIFIED": colors.HexColor("#718397"),
@@ -193,16 +194,12 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
                     story.append(Paragraph(f"<b>{label}:</b> {escape(_pdf_text(value)).replace(chr(10), '<br/>')}", small_style))
     if details.get("log_events"):
         events = details["log_events"]
-        if details.get("cvss_severity_counts") and sum(details["cvss_severity_counts"].values()):
-            unscored = details.get("cvss_unscored_count", 0)
+        if details.get("log_severity_counts"):
             story.append(KeepTogether([
-                Paragraph("CVSS v3.1 Base Score Distribution", heading_style),
-                _severity_summary_chart(details["cvss_severity_counts"]),
-                paragraph(f"{unscored} log(s) had no complete v3.1 vector. CVSS scores vulnerability severity, not log activity.", small_style),
+                Paragraph("Log severity distribution", heading_style),
+                _severity_summary_chart(details["log_severity_counts"]),
+                paragraph("Counts use the severity labels present in each log line. Unclassified means no recognized severity label was provided.", small_style),
             ]))
-        elif details.get("cvss_severity_counts"):
-            story.append(Paragraph("CVSS v3.1 Base Score Distribution", heading_style))
-            story.append(paragraph("No complete CVSS v3.1 vectors in these logs; no CVSS scores assigned.", small_style))
         log_section_heading = Paragraph("Parsed log events and network details", heading_style)
         for event_index, event in enumerate(events):
             source = event.get("source_ip", "Not present")

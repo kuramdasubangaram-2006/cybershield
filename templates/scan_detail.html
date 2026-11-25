@@ -75,16 +75,13 @@
   {% if details.log_events %}
     <section class="content-panel">
       <div class="panel-heading"><div><h3>Parsed log events and network details</h3><p>Every non-empty input line is included. Unlabelled addresses are not guessed as source or destination. CVSS describes vulnerability severity, not the overall log activity risk.</p></div></div>
-      {% if details.cvss_severity_counts %}
-        <div class="indicator-block cvss-chart-panel"><h4>CVSS v3.1 Base Score Distribution</h4>
-          {% set scored_vectors = details.cvss_severity_counts.values()|sum %}
-          {% if scored_vectors %}<p>{{ details.cvss_unscored_count|default(0) }} log(s) had no complete v3.1 vector. CVSS scores vulnerability severity, not whether a log event is malicious.</p>
-            <div class="nessus-severity-bars" role="img" aria-label="Calculated CVSS v3.1 severity counts">
-              {% for severity, count in details.cvss_severity_counts.items() %}
-                <div class="nessus-severity-row severity-{{ severity|lower }}"><span>{{ severity }}</span><span class="nessus-severity-track"><span class="nessus-bar-{{ severity|lower }}" style="width: {{ (count * 100 / scored_vectors)|round(1) }}%"></span></span><strong>{{ count }}</strong></div>
-              {% endfor %}
-            </div>
-          {% else %}<p class="report-muted">No complete CVSS v3.1 vectors in these logs; no CVSS scores assigned.</p>{% endif %}
+      {% if details.log_severity_counts %}
+        <div class="indicator-block"><h4>Log severity distribution</h4><p>Counts use the severity labels present in each log line. “Unclassified” means no recognized severity label was provided.</p>
+          <div class="nessus-severity-bars" role="img" aria-label="Log severity counts">
+            {% for severity, count in details.log_severity_counts.items() %}
+              <div class="nessus-severity-row severity-{{ severity|lower }}"><span>{{ severity }}</span><span class="nessus-severity-track"><span class="nessus-bar-{{ severity|lower }}" style="width: {{ (count * 100 / (details.log_events|length))|round(1) }}%"></span></span><strong>{{ count }}</strong></div>
+            {% endfor %}
+          </div>
         </div>
       {% endif %}
       <div class="table-responsive">
