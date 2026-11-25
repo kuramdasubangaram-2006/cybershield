@@ -1,7 +1,7 @@
 <section class="content-panel endpoint-monitor-panel" data-agent-dashboard data-api-url="{{ url_for('agent_dashboard_data') }}">
   <div class="panel-heading">
     <div><h3>Live Windows threat monitoring</h3><p>Events reported by connected Windows agents. Updates every 15 seconds; no sample events are shown.</p></div>
-    <a class="primary-link" href="{{ url_for('manage_agents') }}">Manage agents <span aria-hidden="true">→</span></a>
+    <div class="agent-report-actions"><a class="primary-link" href="{{ url_for('download_agent_event_report') }}">Download 7-day PDF</a><a class="primary-link" href="{{ url_for('manage_agents') }}">Manage agents <span aria-hidden="true">→</span></a></div>
   </div>
   <div class="agent-live-stats">
     <div><span>Devices online</span><strong data-agent-online>—</strong></div>
@@ -10,8 +10,8 @@
   </div>
   <div class="agent-live-status" data-agent-status role="status">Connecting to agent event feed…</div>
   <div class="table-responsive">
-    <table class="data-table"><thead><tr><th>Device</th>{% if current_user.role == 'admin' %}<th>Account</th>{% endif %}<th>Event ID</th><th>Event</th><th>Source IP:port</th><th>Destination IP:port</th><th>Direction / protocol</th><th>Severity</th><th>Event time</th></tr></thead>
-      <tbody data-agent-events><tr><td colspan="{% if current_user.role == 'admin' %}9{% else %}8{% endif %}">Loading event feed…</td></tr></tbody>
+    <table class="data-table"><thead><tr><th>Device</th>{% if current_user.role == 'admin' %}<th>Account</th>{% endif %}<th>Event ID</th><th>Log source</th><th>Record ID</th><th>Event</th><th>Source IP:port</th><th>Destination IP:port</th><th>Direction / protocol</th><th>Severity</th><th>Event time</th><th>Details</th></tr></thead>
+      <tbody data-agent-events><tr><td colspan="{% if current_user.role == 'admin' %}12{% else %}11{% endif %}">Loading event feed…</td></tr></tbody>
     </table>
   </div>
   <p class="scanner-privacy-note">These are events reported by the paired agent and matched against CyberShield’s limited local rules. This is not a full antivirus or network-wide verdict.</p>

@@ -1954,6 +1954,15 @@ body.login-page.auth-screen .login-card .form-control:hover {
 .agent-token-value { color: #b9f2ff; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
 .agent-status-indicator { color: #c6d6ec; }
 .agent-status-indicator.agent-online { color: #83f0c9; }
+.agent-command-guide { margin-top: 16px; padding: 14px; border: 1px solid rgba(83, 159, 226, .2); border-radius: 10px; background: rgba(6, 17, 36, .35); }
+.agent-command-guide h4 { margin: 0 0 6px; color: #9cecff; font-size: .92rem; }
+.agent-command-guide p { margin: 7px 0; color: #c5d5ea; font-size: .8rem; }
+.agent-command-guide pre { overflow-x: auto; margin: 8px 0; padding: 10px 12px; border: 1px solid rgba(98, 158, 221, .19); border-radius: 8px; background: rgba(1, 9, 24, .74); color: #c9f2ff; font-size: .76rem; white-space: pre; }
+.agent-command-guide code { color: inherit; }
+.agent-event-details summary { color: #83eaff; cursor: pointer; font-weight: 700; }
+.agent-event-details p { min-width: 180px; max-width: 280px; margin: 6px 0 0; color: #d4e3f5; font-size: .76rem; white-space: normal; }
+.agent-report-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.agent-report-panel .panel-heading { align-items: flex-start; }
 @media (max-width: 600px) {
   .agent-live-stats { grid-template-columns: 1fr; }
   .agent-create-form { flex-basis: 100%; }

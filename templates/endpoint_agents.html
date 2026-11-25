@@ -18,8 +18,9 @@
     <div class="panel-heading"><div><h3>Connect a Windows device</h3><p>The agent reads only the listed Windows event IDs. It does not execute commands, collect full event text, or allow remote control.</p></div></div>
     <ol class="agent-setup-steps">
       <li>Create a device token below and copy it. Keep it private.</li>
-      <li>Download the PowerShell agent and inspect the script before running it.</li>
-      <li>Run it in an elevated PowerShell window, paste the token when prompted, and leave the window open to monitor.</li>
+      <li>Download the PowerShell agent. Open PowerShell using <strong>Run as administrator</strong>.</li>
+      <li>Run the commands below. When prompted, return here, click <strong>Copy token</strong>, then press Enter in PowerShell. Do not paste the token into chat.</li>
+      <li>Leave the PowerShell window open while monitoring.</li>
       <li>Revoke the device here to stop it sending events. Stop the script on the device too.</li>
     </ol>
     <p class="scanner-privacy-note">Only event IDs 4624, 4625, 1102, 1116, 1117, 5156, and 5157 are allowed. If Windows firewall auditing is enabled, network events can include source/destination IPs, ports, protocol, and direction. Usernames and full event messages are not sent.</p>
@@ -33,6 +34,20 @@
         <button class="btn sign-in-button" type="submit">Create device token</button>
       </form>
     </div>
+    <div class="agent-command-guide">
+      <h4>PowerShell commands</h4>
+      <p>Download the agent first. These commands run the newest downloaded copy. Execution Policy change applies only to this PowerShell window.</p>
+      <pre><code>cd "$env:USERPROFILE\Downloads"
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass</code></pre>
+      <p>If PowerShell asks for confirmation, type <code>Y</code> and press Enter. Then run:</p>
+      <pre><code>$agentFile = Get-ChildItem "$env:USERPROFILE\Downloads\cybershield-windows-agent*.ps1" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+&amp; $agentFile.FullName</code></pre>
+      <p>At the token prompt, click <strong>Copy token</strong> above, switch back to PowerShell, and press Enter. The script reads it from your clipboard.</p>
+    </div>
+  </section>
+  <section class="content-panel agent-report-panel">
+    <div class="panel-heading"><div><h3>Windows event report</h3><p>Download the newest events received in the last 7 days, with event IDs, record IDs, IP details, alerts, and suggested actions.</p></div><a class="primary-link" href="{{ url_for('download_agent_event_report') }}">Generate PDF report <span aria-hidden="true">↓</span></a></div>
+    <p class="scanner-privacy-note">Windows event logs are not CVE vulnerability findings, so this report does not invent CVSS scores. Use the Nessus report analysis for scanner CVEs and their CVSS details.</p>
   </section>
 
   <section class="content-panel">

@@ -40,7 +40,7 @@ except ImportError as exc:  # Keep local startup usable until dependencies are i
 from database import INTEGRITY_ERRORS, close_db, get_db, init_db
 from detectors import analyze_file, analyze_ip, analyze_logs, analyze_nessus_report, analyze_url
 from site_inspector import inspect_public_site
-from pdf_reports import build_scan_pdf
+from pdf_reports import build_agent_events_pdf, build_scan_pdf
 
 
 load_dotenv()
@@ -831,6 +831,64 @@ def create_app():
         agent_path = Path(app.root_path) / "agent" / "windows_agent.ps1"
         return send_file(agent_path, as_attachment=True, download_name="cybershield-windows-agent.ps1", mimetype="text/plain")
 
+    @app.get("/account/agents/report.pdf")
+    @login_required
+    def download_agent_event_report():
+        user = get_current_user()
+        db = get_db()
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        cutoff_parameter = cutoff if current_app.config.get("DATABASE_URL") else cutoff.strftime("%Y-%m-%d %H:%M:%S")
+        where = "events.created_at >= ?"
+        parameters = [cutoff_parameter]
+        if user["role"] != "admin":
+            where += " AND agents.user_id = ?"
+            parameters.append(user["id"])
+        total_count = db.execute(
+            "SELECT COUNT(*) AS count FROM endpoint_events AS events "
+            "JOIN endpoint_agents AS agents ON agents.id = events.agent_id WHERE " + where,
+            tuple(parameters),
+        ).fetchone()["count"]
+        rows = db.execute(
+            "SELECT events.source_ref, events.channel, events.event_time, events.event_id, events.event_name, "
+            "events.source_ip, events.source_port, events.destination_ip, events.destination_port, "
+            "events.network_protocol, events.network_direction, events.alert_level, events.alert_text, "
+            "agents.name AS agent_name, users.email AS account_email "
+            "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
+            "JOIN users ON users.id = agents.user_id WHERE " + where +
+            " ORDER BY events.created_at DESC, events.id DESC LIMIT 501",
+            tuple(parameters),
+        ).fetchall()
+        report_events = []
+        for row in rows[:500]:
+            event_time = parse_utc_datetime(row["event_time"])
+            item = {
+                "source_ref": row["source_ref"],
+                "channel": row["channel"],
+                "record_id": str(row["source_ref"]).rsplit(":", 1)[-1],
+                "event_time_ist": event_time.astimezone(INDIA_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S IST"),
+                "event_id": row["event_id"],
+                "event_name": row["event_name"],
+                "source_ip": row["source_ip"],
+                "source_port": row["source_port"],
+                "destination_ip": row["destination_ip"],
+                "destination_port": row["destination_port"],
+                "network_protocol": row["network_protocol"],
+                "network_direction": row["network_direction"],
+                "alert_level": row["alert_level"],
+                "alert_text": row["alert_text"],
+                "agent_name": row["agent_name"],
+            }
+            if user["role"] == "admin":
+                item["account_email"] = row["account_email"]
+            report_events.append(item)
+        generated_at = datetime.now(INDIA_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S IST")
+        report = build_agent_events_pdf(
+            report_events, generated_at, "Previous 7 days", total_count,
+            admin_view=user["role"] == "admin",
+        )
+        filename = f"cybershield-windows-events-{datetime.now(INDIA_TIMEZONE):%Y%m%d-%H%M%S}.pdf"
+        return send_file(report, mimetype="application/pdf", as_attachment=True, download_name=filename)
+
     @app.get("/api/agent/dashboard")
     @login_required
     def agent_dashboard_data():
@@ -841,7 +899,7 @@ def create_app():
                 "SELECT id, last_seen_at FROM endpoint_agents WHERE revoked_at IS NULL"
             ).fetchall()
             rows = db.execute(
-                "SELECT events.id, events.event_time, events.event_id, events.event_name, events.source_ip, events.source_port, "
+                "SELECT events.id, events.source_ref, events.channel, events.event_time, events.event_id, events.event_name, events.source_ip, events.source_port, "
                 "events.destination_ip, events.destination_port, events.network_protocol, events.network_direction, "
                 "events.alert_level, events.alert_text, agents.name AS agent_name, users.email AS account_email "
                 "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
@@ -868,7 +926,7 @@ def create_app():
                 (user["id"],),
             ).fetchall()
             rows = db.execute(
-                "SELECT events.id, events.event_time, events.event_id, events.event_name, events.source_ip, events.source_port, "
+                "SELECT events.id, events.source_ref, events.channel, events.event_time, events.event_id, events.event_name, events.source_ip, events.source_port, "
                 "events.destination_ip, events.destination_port, events.network_protocol, events.network_direction, "
                 "events.alert_level, events.alert_text, agents.name AS agent_name "
                 "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
@@ -899,6 +957,8 @@ def create_app():
             item = {
                 "event_time": str(row["event_time"]),
                 "event_id": row["event_id"],
+                "log_source": row["channel"],
+                "record_id": str(row["source_ref"]).rsplit(":", 1)[-1],
                 "event_name": row["event_name"],
                 "source_ip": row["source_ip"] or "Not present",
                 "source_port": row["source_port"],

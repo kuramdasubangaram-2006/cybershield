@@ -38,6 +38,8 @@ document.addEventListener("DOMContentLoaded", () => {
       cell(row, event.agent_name);
       if (Object.hasOwn(event, "account_email")) cell(row, event.account_email);
       cell(row, event.event_id);
+      cell(row, event.log_source);
+      cell(row, event.record_id);
       cell(row, event.event_name);
       cell(row, event.source_port ? `${event.source_ip}:${event.source_port}` : event.source_ip);
       cell(row, event.destination_port ? `${event.destination_ip}:${event.destination_port}` : event.destination_ip);
@@ -48,6 +50,17 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       severity.title = event.alert_text || "";
       cell(row, displayTime(event.event_time));
+      const detailsCell = cell(row, "");
+      const details = document.createElement("details");
+      details.className = "agent-event-details";
+      const summary = document.createElement("summary");
+      summary.textContent = "View";
+      const detailText = document.createElement("p");
+      detailText.textContent = event.alert_level === "Event"
+        ? "No alert rule matched this event."
+        : (event.alert_text || "Review this event in Windows Event Viewer.");
+      details.append(summary, detailText);
+      detailsCell.append(details);
       return row;
     });
     eventsBody.replaceChildren(...rows);

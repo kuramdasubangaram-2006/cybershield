@@ -333,3 +333,124 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
     output.seek(0)
     return output
+
+
+def build_agent_events_pdf(events, generated_at, period_label, total_count, admin_view=False):
+    """Build a user-scoped Windows event report without inventing CVSS scores."""
+    from io import BytesIO
+
+    output = BytesIO()
+    doc = SimpleDocTemplate(
+        output, pagesize=A4, rightMargin=17 * mm, leftMargin=17 * mm,
+        topMargin=16 * mm, bottomMargin=17 * mm,
+        title="CyberShield Windows Event Report", author="CyberShield",
+    )
+    base = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "AgentReportTitle", parent=base["Title"], fontName="Helvetica-Bold", fontSize=19,
+        leading=23, textColor=colors.HexColor("#0b2334"), alignment=TA_LEFT, spaceAfter=3 * mm,
+    )
+    heading_style = ParagraphStyle(
+        "AgentReportHeading", parent=base["Heading2"], fontName="Helvetica-Bold", fontSize=11,
+        leading=14, textColor=colors.HexColor("#087d91"), spaceBefore=4 * mm, spaceAfter=2 * mm,
+    )
+    body_style = ParagraphStyle(
+        "AgentReportBody", parent=base["BodyText"], fontName="Helvetica", fontSize=8.5,
+        leading=11, textColor=colors.HexColor("#263746"), wordWrap="CJK",
+    )
+    small_style = ParagraphStyle("AgentReportSmall", parent=body_style, fontSize=7.5, leading=9.5)
+
+    def paragraph(value, style=body_style):
+        safe_text = _pdf_text(value)
+        return Paragraph(escape(safe_text).replace("\n", "<br/>"), style)
+
+    story = [
+        Paragraph("CyberShield Windows Event Report", title_style),
+        paragraph("Collected event telemetry from connected Windows agents. This is not a vulnerability scan or a confirmed compromise verdict."),
+        Spacer(1, 2 * mm),
+    ]
+    alert_count = sum(1 for event in events if event.get("alert_level"))
+    devices = len({event.get("agent_name", "") for event in events if event.get("agent_name")})
+    overview_rows = [
+        [paragraph("Reporting period", small_style), paragraph(period_label, body_style)],
+        [paragraph("Generated", small_style), paragraph(generated_at, body_style)],
+        [paragraph("Events included / available", small_style), paragraph(f"{len(events)} / {total_count}", body_style)],
+        [paragraph("Connected devices represented", small_style), paragraph(str(devices), body_style)],
+        [paragraph("Rule-based alerts", small_style), paragraph(str(alert_count), body_style)],
+        [paragraph("CVSS", small_style), paragraph("Not applicable: these Windows event records do not contain CVE vulnerability findings. No CVSS score was inferred.", small_style)],
+    ]
+    if admin_view:
+        overview_rows.insert(2, [paragraph("Scope", small_style), paragraph("Workspace events across user accounts", body_style)])
+    overview = Table(overview_rows, colWidths=[42 * mm, 130 * mm], hAlign="LEFT")
+    overview.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#edf4f7")),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd9df")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#d8e3e8")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    story.extend([overview, Paragraph("Severity distribution", heading_style)])
+    counts = Counter(event.get("alert_level") or "Event" for event in events)
+    if counts:
+        story.append(_severity_summary_chart(counts))
+    else:
+        story.append(paragraph("No events were received during this period."))
+    story.append(Paragraph("Event details", heading_style))
+
+    mitigation_by_id = {
+        1102: "Windows Security audit logs were cleared. Confirm whether this was an authorized action and review other retained logs for the same time period.",
+        1116: "Microsoft Defender reported a threat. Review Windows Security Protection history and confirm the recorded action; follow incident response if the threat was not expected.",
+        5157: "Windows Firewall blocked a connection. Verify the application and destination against expected activity; a blocked connection alone does not prove compromise.",
+    }
+    for index, event in enumerate(events, start=1):
+        event_id = event.get("event_id")
+        severity = event.get("alert_level") or "Event"
+        detail_text = event.get("alert_text") or "No alert rule matched this event; it is included as activity context."
+        mitigation = mitigation_by_id.get(event_id)
+        if event_id == 4625 and severity == "High":
+            mitigation = "Review the source IP and affected account activity, confirm whether the attempts were expected, and strengthen authentication or block the source when appropriate."
+        rows = [
+            [paragraph("Device", small_style), paragraph(event.get("agent_name", "Not provided"), small_style)],
+            [paragraph("Account", small_style), paragraph(event.get("account_email", "Not shown"), small_style)] if admin_view else None,
+            [paragraph("Log source / Event ID", small_style), paragraph(f"{event.get('channel', 'Not provided')} / {event_id}", small_style)],
+            [paragraph("Windows Record ID", small_style), paragraph(event.get("record_id", "Not provided"), small_style)],
+            [paragraph("Event", small_style), paragraph(event.get("event_name", "Not provided"), small_style)],
+            [paragraph("Severity / time (IST)", small_style), paragraph(f"{severity} / {event.get('event_time_ist', 'Not provided')}", small_style)],
+            [paragraph("Source IP:port", small_style), paragraph(f"{event.get('source_ip') or 'Not present'}{':' + str(event['source_port']) if event.get('source_port') is not None else ''}", small_style)],
+            [paragraph("Destination IP:port", small_style), paragraph(f"{event.get('destination_ip') or 'Not present'}{':' + str(event['destination_port']) if event.get('destination_port') is not None else ''}", small_style)],
+            [paragraph("Direction / protocol", small_style), paragraph(" / ".join(value for value in (event.get("network_direction"), event.get("network_protocol")) if value) or "Not present", small_style)],
+            [paragraph("Alert detail", small_style), paragraph(detail_text, small_style)],
+        ]
+        rows = [row for row in rows if row is not None]
+        if mitigation:
+            rows.append([paragraph("Suggested action", small_style), paragraph(mitigation, small_style)])
+        detail_table = Table(rows, colWidths=[39 * mm, 133 * mm], hAlign="LEFT")
+        detail_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f2f6f8")),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd9df")),
+            ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#e0e8ec")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        story.append(KeepTogether([Paragraph(f"Event {index}: {escape(_pdf_text(event.get('event_name', 'Windows event')))}", heading_style), detail_table, Spacer(1, 2 * mm)]))
+
+    if total_count > len(events):
+        story.append(paragraph(f"This report includes the newest {len(events)} events out of {total_count} received during the selected period."))
+
+    def footer(canvas, document):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 7.5)
+        canvas.setFillColor(colors.HexColor("#627786"))
+        canvas.drawString(17 * mm, 11 * mm, "Windows event telemetry; CVSS is not inferred from log events.")
+        canvas.drawRightString(A4[0] - 17 * mm, 11 * mm, f"Page {document.page}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    output.seek(0)
+    return output
