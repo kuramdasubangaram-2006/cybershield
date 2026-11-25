@@ -30,7 +30,7 @@
       </div>
       <p class="result-summary">{{ result.summary }}</p>
       <p class="result-summary">{{ result.explanation }}</p>
-      <p class="role-note left-note">{{ result.analysis_scope }}</p>
+      <details class="report-more"><summary>Analysis limits</summary><p class="role-note left-note">{{ result.analysis_scope }}</p></details>
       {% if result.log_severity_counts %}
         <div class="indicator-block">
           <h4>Input log severity levels</h4>
@@ -45,12 +45,14 @@
       {% if result.cvss_severity_counts %}
         <div class="indicator-block cvss-chart-panel">
           <h4>CVSS v3.1 Base Score Distribution</h4>
-          <p>Calculated only from complete v3.1 vectors: {{ result.cvss_unscored_count }} event(s) have no usable vector and remain unscored. Bands: None 0.0, Low 0.1–3.9, Medium 4.0–6.9, High 7.0–8.9, Critical 9.0–10.0. CVSS describes vulnerability impact, not whether a log event is malicious.</p>
-          <div class="nessus-severity-bars" role="img" aria-label="Calculated CVSS v3.1 severity counts">
-            {% for severity, count in result.cvss_severity_counts.items() %}
-              <div class="nessus-severity-row severity-{{ severity|lower }}"><span>{{ severity }}</span><span class="nessus-severity-track"><span class="nessus-bar-{{ severity|lower }}" style="width: {{ (count * 100 / (result.cvss_severity_counts.values()|sum))|round(1) if result.cvss_severity_counts.values()|sum else 0 }}%"></span></span><strong>{{ count }}</strong></div>
-            {% endfor %}
-          </div>
+          {% set scored_vectors = result.cvss_severity_counts.values()|sum %}
+          {% if scored_vectors %}<p>{{ result.cvss_unscored_count }} log(s) had no complete v3.1 vector. CVSS scores vulnerability severity, not whether a log event is malicious.</p>
+            <div class="nessus-severity-bars" role="img" aria-label="Calculated CVSS v3.1 severity counts">
+              {% for severity, count in result.cvss_severity_counts.items() %}
+                <div class="nessus-severity-row severity-{{ severity|lower }}"><span>{{ severity }}</span><span class="nessus-severity-track"><span class="nessus-bar-{{ severity|lower }}" style="width: {{ (count * 100 / scored_vectors)|round(1) }}%"></span></span><strong>{{ count }}</strong></div>
+              {% endfor %}
+            </div>
+          {% else %}<p class="report-muted">No complete CVSS v3.1 vectors in these logs; no CVSS scores assigned.</p>{% endif %}
         </div>
       {% endif %}
       {% if result.nessus_findings %}
@@ -140,17 +142,19 @@
           </div>
         </div>
       {% endif %}
-      {% if result.log_events %}
+      {% set vuln_info = namespace(found=false) %}
+      {% for event in result.log_events %}{% if event.cves or event.cvss_as_reported != 'Not present' or event.cvss_vector_as_reported != 'Not present' %}{% set vuln_info.found = true %}{% endif %}{% endfor %}
+      {% if result.log_events and vuln_info.found %}
         <div class="indicator-block mitigation-guidance">
-          <h4>Mitigation guidance and trusted sources</h4>
-          <p>Log text alone does not confirm that a product is affected. Check the exact product and version, validate the finding in the original scanner, and open each CVE record for its affected versions and vendor advisory references.</p>
+          <h4>Mitigation</h4>
+          <p>First confirm the affected product/version and finding in the original scanner. Log text alone does not prove a system is vulnerable.</p>
           <ol class="detail-list">
-            <li>When affected, apply the fix or upgrade recommended by the product vendor, then verify the installed version and rescan.</li>
-            <li>If a fix cannot be applied yet, use a temporary vendor/CISA-supported mitigation such as restricting exposure, isolating the affected service, or disabling the vulnerable feature where safe. Track it until patched.</li>
-            <li>Prioritize CVEs listed in CISA’s Known Exploited Vulnerabilities catalog, while considering asset exposure and business impact.</li>
+            <li>If affected, follow the vendor advisory to patch or upgrade; then verify and rescan.</li>
+            <li>If patching is delayed, restrict exposure or isolate/disable the affected service where safe; track until fixed.</li>
+            <li>Prioritize CVEs in CISA’s Known Exploited Vulnerabilities catalog.</li>
           </ol>
-          <div class="report-source-links"><a href="https://nvd.nist.gov/vuln/" target="_blank" rel="noopener noreferrer">NIST NVD CVE records and references</a><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" target="_blank" rel="noopener noreferrer">CISA Known Exploited Vulnerabilities catalog</a><a href="https://www.cisa.gov/sites/default/files/publications/Federal_Government_Cybersecurity_Incident_and_Vulnerability_Response_Playbooks_508C.pdf" target="_blank" rel="noopener noreferrer">CISA vulnerability response playbook</a><a href="https://www.first.org/cvss/v3.1/specification-document" target="_blank" rel="noopener noreferrer">FIRST CVSS v3.1 specification</a></div>
-          <p class="scanner-privacy-note">These are general response steps, not a CVE-specific patch recommendation. The input did not establish affected products or versions; follow the relevant vendor advisory before changing production systems.</p>
+          <div class="report-source-links"><a href="https://nvd.nist.gov/vuln/" target="_blank" rel="noopener noreferrer">NIST NVD: CVE details and vendor references</a><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" target="_blank" rel="noopener noreferrer">CISA: actively exploited CVEs</a><a href="https://www.cisa.gov/sites/default/files/publications/Federal_Government_Cybersecurity_Incident_and_Vulnerability_Response_Playbooks_508C.pdf" target="_blank" rel="noopener noreferrer">CISA: response guidance</a></div>
+          <p class="scanner-privacy-note">General guidance only. Use the affected product’s vendor advisory for the exact fix.</p>
         </div>
       {% endif %}
       {% endif %}

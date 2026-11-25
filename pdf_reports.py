@@ -135,7 +135,10 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
     if details.get("site_explanation"):
         add_section("Website response details", [details["site_explanation"]])
     if details.get("analysis_scope"):
-        add_section("Analysis scope", [details["analysis_scope"]])
+        if scan["module"] == "Log Analysis":
+            add_section("Analysis scope", ["Local text-pattern review only. CVEs, affected products, and scanner findings were not independently verified; no live threat-intelligence lookup was performed."])
+        else:
+            add_section("Analysis scope", [details["analysis_scope"]])
     if details.get("findings"):
         add_section("Detailed static findings", [
             f"{item.get('severity', 'Review')} — {item.get('name', 'Finding')}: {item.get('detail', '')}"
@@ -194,11 +197,14 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
             story.append(Paragraph("Input log severity levels", heading_style))
             story.append(_severity_summary_chart(details["log_severity_counts"]))
             story.append(paragraph("Counts use explicit priority labels from the input. Other labels remain unclassified; these counts are not CVSS scores or verified threat judgments.", small_style))
-        if details.get("cvss_severity_counts"):
+        if details.get("cvss_severity_counts") and sum(details["cvss_severity_counts"].values()):
             story.append(Paragraph("CVSS v3.1 Base Score Distribution", heading_style))
             story.append(_severity_summary_chart(details["cvss_severity_counts"]))
             unscored = details.get("cvss_unscored_count", 0)
-            story.append(paragraph(f"Only complete supplied CVSS v3.1 vectors are calculated; {unscored} event(s) have no usable vector and remain unscored. Bands: None 0.0, Low 0.1–3.9, Medium 4.0–6.9, High 7.0–8.9, Critical 9.0–10.0. CVSS rates vulnerability impact, not log activity. CVEs and vectors are not independently verified.", small_style))
+            story.append(paragraph(f"{unscored} log(s) had no complete v3.1 vector. CVSS scores vulnerability severity, not log activity.", small_style))
+        elif details.get("cvss_severity_counts"):
+            story.append(Paragraph("CVSS v3.1 Base Score Distribution", heading_style))
+            story.append(paragraph("No complete CVSS v3.1 vectors in these logs; no CVSS scores assigned.", small_style))
         log_section_heading = Paragraph("Parsed log events and network details", heading_style)
         for event_index, event in enumerate(events):
             source = event.get("source_ip", "Not present")
@@ -262,23 +268,21 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
                 story.append(KeepTogether([log_section_heading, card, Spacer(1, 2 * mm)]))
             else:
                 story.append(KeepTogether([card, Spacer(1, 2 * mm)]))
-        story.append(Paragraph("Mitigation guidance and trusted sources", heading_style))
-        story.append(paragraph("Log text alone does not confirm that a product is affected. Check the exact product and version, validate each finding in the original scanner, and review the affected versions and vendor advisory references in the CVE record.", small_style))
-        for action in (
-            "When affected, apply the fix or upgrade recommended by the product vendor, then verify the installed version and rescan.",
-            "If a fix cannot be applied yet, use a temporary vendor/CISA-supported mitigation such as restricting exposure, isolating the affected service, or disabling the vulnerable feature where safe. Track it until patched.",
-            "Prioritize CVEs in CISA’s Known Exploited Vulnerabilities catalog while considering asset exposure and business impact.",
-        ):
-            story.append(Paragraph("- " + escape(_pdf_text(action)), body_style))
-        references = (
-            ("NIST NVD CVE records and references", "https://nvd.nist.gov/vuln/"),
-            ("CISA Known Exploited Vulnerabilities catalog", "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"),
-            ("CISA vulnerability response playbook", "https://www.cisa.gov/sites/default/files/publications/Federal_Government_Cybersecurity_Incident_and_Vulnerability_Response_Playbooks_508C.pdf"),
-            ("FIRST CVSS v3.1 specification", "https://www.first.org/cvss/v3.1/specification-document"),
+        has_vulnerability_data = any(
+            event.get("cves")
+            or event.get("cvss_as_reported") not in (None, "Not present")
+            or event.get("cvss_vector_as_reported") not in (None, "Not present")
+            for event in events
         )
-        for label, url in references:
-            story.append(Paragraph(f'- <link href="{escape(url)}" color="#087d91">{escape(label)}</link>', small_style))
-        story.append(paragraph("These are general response steps, not a CVE-specific patch recommendation. The input did not establish affected products or versions; follow the relevant vendor advisory before changing production systems.", small_style))
+        if has_vulnerability_data:
+            story.append(Paragraph("Mitigation", heading_style))
+            story.append(paragraph("Confirm the affected product/version and finding in the source scanner. If affected, follow the vendor advisory to patch; if delayed, restrict exposure or isolate the service where safe. Prioritize CVEs listed in CISA KEV.", small_style))
+            for label, url in (
+                ("NIST NVD: CVE details and vendor references", "https://nvd.nist.gov/vuln/"),
+                ("CISA: actively exploited CVEs", "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"),
+                ("CISA: response guidance", "https://www.cisa.gov/sites/default/files/publications/Federal_Government_Cybersecurity_Incident_and_Vulnerability_Response_Playbooks_508C.pdf"),
+            ):
+                story.append(Paragraph(f'- <link href="{escape(url)}" color="#087d91">{escape(label)}</link>', small_style))
     elif scan["module"] == "Log Analysis":
         add_section("Log detail availability", [
             "Line-level data is not available for this earlier scan because the original log text was not retained. Rerun the analysis to generate the expanded event report."
