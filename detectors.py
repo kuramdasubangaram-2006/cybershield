@@ -669,6 +669,16 @@ def analyze_logs(value):
     success_sources = {}
     timestamped_lines = 0
     log_events = []
+    # Keep source log priority separate from CVSS vulnerability severity.
+    # A log's INFO/ERROR level is not itself a CVSS risk score.
+    log_severity_counts = {label: 0 for label in ("Info", "Low", "Medium", "High", "Critical", "Unclassified")}
+    cvss_severity_counts = {label: 0 for label in ("None", "Low", "Medium", "High", "Critical")}
+    log_severity_aliases = {
+        "INFO": "Info", "INFORMATIONAL": "Info",
+        "LOW": "Low", "MEDIUM": "Medium", "MODERATE": "Medium",
+        "HIGH": "High", "CRITICAL": "Critical", "CRIT": "Critical",
+        "ALERT": "Critical", "EMERGENCY": "Critical", "FATAL": "Critical",
+    }
     for line_number, line in numbered_lines:
         parsed_fields = _extract_log_fields(line)
         addresses = set()
@@ -862,12 +872,18 @@ def analyze_logs(value):
                 source_port = int(ssh_port.group(1))
         protocol_match = protocol_pattern.search(line)
         severity_match = severity_pattern.search(line)
+        event_severity = severity_match.group(1).upper() if severity_match else str(severity_value).upper() if severity_value else "Not specified"
+        normalized_log_severity = log_severity_aliases.get(event_severity, "Unclassified")
+        log_severity_counts[normalized_log_severity] += 1
+        calculated_cvss_severity = cvss_severity(computed_cvss31) if computed_cvss31 is not None else None
+        if calculated_cvss_severity in cvss_severity_counts:
+            cvss_severity_counts[calculated_cvss_severity] += 1
         log_events.append({
             "line": line_number,
             "timestamp": parsed_timestamp or "Not present",
             "timestamp_status": timestamp_status,
             "event": event_name,
-                "severity": (severity_match.group(1).upper() if severity_match else str(severity_value).upper() if severity_value else "Not specified"),
+                "severity": event_severity,
             "source_ip": source or "Not present",
             "source_port": str(source_port) if source_port is not None else "Not present",
             "destination_ip": destination or "Not present",
@@ -879,7 +895,7 @@ def analyze_logs(value):
             "cvss_reported_severity": cvss_severity(reported_score_value),
             "cvss_vector_as_reported": cvss_vector or "Not present",
             "cvss_base_calculated": f"{computed_cvss31:.1f}" if computed_cvss31 is not None else "Not calculated",
-            "cvss_severity": cvss_severity(computed_cvss31) if computed_cvss31 is not None else "Not assigned",
+            "cvss_severity": calculated_cvss_severity or "Not assigned",
             "cvss_note": cvss_note,
             "fields": parsed_fields,
             "line_excerpt": _sanitize_log_line(line),
@@ -1038,6 +1054,9 @@ def analyze_logs(value):
         "line_count": len(lines),
         "counts": {**counts, "distinct_failure_sources": len(failure_sources), "repeated_failure_sources": len(repeated_failure_sources), "rapid_failure_sources": len(rapid_failure_sources), "failures_then_success": len(failures_then_success), "timestamped_lines": timestamped_lines},
         "event_categories": event_categories,
+        "log_severity_counts": log_severity_counts,
+        "cvss_severity_counts": cvss_severity_counts,
+        "cvss_unscored_count": len(log_events) - sum(cvss_severity_counts.values()),
         "log_events": log_events,
         "analysis_scope": (
             "Local log parsing only; every non-empty input line is represented in the report. The original unmodified text is not retained; a sanitized line excerpt and recognized structured fields are saved. "
@@ -1102,7 +1121,7 @@ def analyze_nessus_report(content):
     reports = [node for node in root.iter() if node.tag.rsplit("}", 1)[-1] == "Report"]
     report_name = reports[0].get("name", "Nessus scan") if reports else "Nessus scan"
     host_nodes = [node for node in root.iter() if node.tag.rsplit("}", 1)[-1] == "ReportHost"]
-    severity_labels = {0: "Informational", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
+    severity_labels = {0: "Info", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
     risk_labels = {0: "Normal", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
     counts = {label: 0 for label in severity_labels.values()}
     findings = []
@@ -1242,7 +1261,7 @@ def analyze_nessus_report(content):
         "module": "Nessus Report",
         "label": "Imported Nessus scan report",
         "risk": worst,
-        "summary": f"Imported {len(findings)} of {total_items} Nessus finding(s) from {len(assets)} asset(s). Highest severity reported by Nessus: {severity_labels.get(highest_severity, 'Informational')}.",
+        "summary": f"Imported {len(findings)} of {total_items} Nessus finding(s) from {len(assets)} asset(s). Highest severity reported by Nessus: {severity_labels.get(highest_severity, 'Info')}.",
         "explanation": "This result summarizes the supplied Nessus export. It does not run a scan or independently confirm that a listed vulnerability affects the asset.",
         "analysis_scope": "This report is generated from findings in the imported Nessus v2 XML, including its CVE identifiers, scanner severity, and CVSS v2/v3/v4 values and vectors. CVSS v3.1 Base is recalculated only when a complete v3.1 vector is present; other scores remain source-reported. CVEs, affected assets, and plugin evidence are not independently verified; no CVE lookup or new network scan was performed.",
         "facts": {
@@ -1250,7 +1269,7 @@ def analyze_nessus_report(content):
             "Assets reported": str(len(assets)),
             "Findings in source": str(total_items),
             "Detailed findings included": str(len(findings)),
-            "Informational findings": str(counts["Informational"]),
+            "Info findings": str(counts["Info"]),
             "Low findings": str(counts["Low"]),
             "Medium findings": str(counts["Medium"]),
             "High findings": str(counts["High"]),

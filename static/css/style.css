@@ -1071,6 +1071,7 @@ body.login-page .account-switch a:hover { color: #b4efff; text-decoration: under
 .nessus-severity-track { height: 9px; overflow: hidden; border-radius: 99px; background: rgba(132,152,176,.16); }
 .nessus-severity-track > span { display: block; height: 100%; min-width: 2px; border-radius: inherit; }
 .nessus-bar-informational { background: #7f92aa; }
+.nessus-bar-info, .nessus-bar-none, .nessus-bar-unclassified { background: #7f92aa; }
 .nessus-bar-low { background: #56bded; }
 .nessus-bar-medium { background: #b784f5; }
 .nessus-bar-high { background: #ffad4b; }
@@ -1717,6 +1718,105 @@ body.login-page.auth-screen .login-card .form-control:hover {
   -webkit-text-stroke: .2px rgba(1, 8, 25, .78);
 }
 .dashboard-page .dashboard-topbar .eyebrow { color: #90edff; }
+
+/* High contrast scan reports over the animated dashboard background. */
+.dashboard-page .dashboard-content.scan-detail-page .content-panel,
+.dashboard-page .dashboard-content .report-result {
+  border-color: rgba(121, 172, 238, .34);
+  background: linear-gradient(145deg, rgba(7, 18, 40, .96), rgba(12, 28, 57, .94));
+  box-shadow: 0 16px 38px rgba(2, 9, 25, .34), inset 0 1px rgba(197, 224, 255, .08);
+}
+.dashboard-page .dashboard-content.scan-detail-page :is(h2,h3,h4,p,small,label,span,td,th,strong,code),
+.dashboard-page .dashboard-content .report-result :is(h2,h3,h4,p,small,label,span,td,th,strong,code) {
+  color: #e8f1ff;
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+}
+.dashboard-page .dashboard-content.scan-detail-page .panel-heading p,
+.dashboard-page .dashboard-content.scan-detail-page .role-note,
+.dashboard-page .dashboard-content.scan-detail-page .scanner-privacy-note,
+.dashboard-page .dashboard-content.scan-detail-page .table small,
+.dashboard-page .dashboard-content .report-result .role-note,
+.dashboard-page .dashboard-content .report-result .scanner-privacy-note {
+  color: #b4c7e0;
+}
+.dashboard-page .dashboard-content.scan-detail-page .result-summary,
+.dashboard-page .dashboard-content .report-result .result-summary { color: #d5e4f8; }
+.dashboard-page .dashboard-content.scan-detail-page .result-target,
+.dashboard-page .dashboard-content .report-result .result-target {
+  border-color: rgba(125, 169, 224, .25);
+  background: rgba(3, 12, 29, .72);
+  color: #bfeaff;
+}
+.dashboard-page .dashboard-content.scan-detail-page .indicator-block,
+.dashboard-page .dashboard-content.scan-detail-page .scan-detail-facts > div,
+.dashboard-page .dashboard-content .report-result .indicator-block {
+  border-color: rgba(125, 169, 224, .26);
+  background: rgba(13, 31, 60, .78);
+}
+.dashboard-page .dashboard-content.scan-detail-page .scan-detail-facts span,
+.dashboard-page .dashboard-content.scan-detail-page .panel-heading p,
+.dashboard-page .dashboard-content.scan-detail-page .nessus-severity-row > span:first-child,
+.dashboard-page .dashboard-content .report-result .nessus-severity-row > span:first-child { color: #b6c9e2; }
+.dashboard-page .dashboard-content.scan-detail-page .scan-detail-facts strong,
+.dashboard-page .dashboard-content .report-result .nessus-severity-row > strong { color: #f4f8ff; }
+.dashboard-page .dashboard-content.scan-detail-page .table {
+  --bs-table-color: #e3edfc;
+  --bs-table-bg: transparent;
+  --bs-table-border-color: rgba(143, 174, 219, .2);
+  --bs-table-hover-color: #fff;
+  --bs-table-hover-bg: rgba(68, 142, 222, .12);
+  margin-bottom: 0;
+}
+.dashboard-page .dashboard-content.scan-detail-page .table > :not(caption) > * > * {
+  color: #e3edfc;
+  background-color: transparent;
+  border-bottom-color: rgba(143, 174, 219, .2);
+  box-shadow: none;
+  vertical-align: top;
+}
+.dashboard-page .dashboard-content.scan-detail-page .table thead th { color: #a9c2e2; font-size: .74rem; }
+.dashboard-page .dashboard-content.scan-detail-page .table code,
+.dashboard-page .dashboard-content.scan-detail-page .log-line-excerpt {
+  color: #c6efff;
+  background: rgba(3, 12, 29, .7);
+}
+.dashboard-page .dashboard-content.scan-detail-page .nessus-severity-bars,
+.dashboard-page .dashboard-content .report-result .nessus-severity-bars { max-width: 760px; gap: 11px; margin: 16px 0; }
+.dashboard-page .dashboard-content.scan-detail-page .nessus-severity-row,
+.dashboard-page .dashboard-content .report-result .nessus-severity-row { grid-template-columns: 118px minmax(100px, 1fr) 38px; gap: 12px; color: #d9e8fb; font-size: .8rem; }
+.dashboard-page .dashboard-content.scan-detail-page .nessus-severity-track,
+.dashboard-page .dashboard-content .report-result .nessus-severity-track { height: 11px; background: rgba(155, 185, 225, .16); }
+.dashboard-page .dashboard-content.scan-detail-page .nessus-severity-track > span,
+.dashboard-page .dashboard-content .report-result .nessus-severity-track > span { min-width: 0; box-shadow: 0 0 12px currentColor; }
+.dashboard-page .dashboard-content.scan-detail-page .nessus-bar-info,
+.dashboard-page .dashboard-content.scan-detail-page .nessus-bar-none,
+.dashboard-page .dashboard-content .report-result .nessus-bar-info,
+.dashboard-page .dashboard-content .report-result .nessus-bar-none { background: #94a8c4; color: #94a8c4; }
+.dashboard-page .dashboard-content.scan-detail-page .nessus-bar-unclassified,
+.dashboard-page .dashboard-content .report-result .nessus-bar-unclassified { background: #7286a6; color: #7286a6; }
+.dashboard-page .dashboard-content.scan-detail-page .nessus-bar-low,
+.dashboard-page .dashboard-content .report-result .nessus-bar-low { background: #49c7ff; color: #49c7ff; }
+.dashboard-page .dashboard-content.scan-detail-page .nessus-bar-medium,
+.dashboard-page .dashboard-content .report-result .nessus-bar-medium { background: #a981ff; color: #a981ff; }
+.dashboard-page .dashboard-content.scan-detail-page .nessus-bar-high,
+.dashboard-page .dashboard-content .report-result .nessus-bar-high { background: #ffb84d; color: #ffb84d; }
+.dashboard-page .dashboard-content.scan-detail-page .nessus-bar-critical,
+.dashboard-page .dashboard-content .report-result .nessus-bar-critical { background: #ff5f7a; color: #ff5f7a; }
+.dashboard-page .dashboard-content.scan-detail-page .risk-pill { border: 1px solid rgba(154, 194, 243, .28); text-shadow: none; }
+.dashboard-page .dashboard-content.scan-detail-page .primary-link { color: #bfeeff; }
+.dashboard-page .dashboard-content.scan-detail-page .primary-link:hover { color: #fff; }
+.dashboard-page .dashboard-content.scan-detail-page > .welcome-row {
+  padding: 15px 18px;
+  border: 1px solid rgba(121, 172, 238, .3);
+  border-radius: 13px;
+  background: rgba(7, 18, 40, .82);
+  box-shadow: 0 12px 28px rgba(2, 9, 25, .24);
+}
+@media (max-width: 700px) {
+  .dashboard-page .dashboard-content.scan-detail-page .nessus-severity-row,
+  .dashboard-page .dashboard-content .report-result .nessus-severity-row { grid-template-columns: 96px minmax(60px, 1fr) 32px; gap: 8px; font-size: .72rem; }
+}
 .dashboard-page .dashboard-content :is(h2, h3, h4, p, small, label, span, td, th, strong, code) {
   color: #f4f9ff;
   text-shadow: 0 1px 2px rgba(1, 8, 25, .98), 0 0 9px rgba(1, 8, 25, .82);

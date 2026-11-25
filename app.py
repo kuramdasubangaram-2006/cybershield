@@ -61,6 +61,47 @@ def risk_level(value):
     }.get(str(value).lower(), str(value).title())
 
 
+def ensure_saved_log_summaries(details):
+    """Build missing report charts from already-saved parsed log events only."""
+    events = details.get("log_events")
+    if not isinstance(events, list) or not events:
+        return details
+
+    if not details.get("log_severity_counts"):
+        counts = {label: 0 for label in ("Info", "Low", "Medium", "High", "Critical", "Unclassified")}
+        aliases = {
+            "INFO": "Info", "INFORMATIONAL": "Info", "LOW": "Low", "MEDIUM": "Medium",
+            "MODERATE": "Medium", "HIGH": "High", "CRITICAL": "Critical", "CRIT": "Critical",
+            "ALERT": "Critical", "EMERGENCY": "Critical", "FATAL": "Critical",
+        }
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            raw = str(event.get("severity") or "").upper()
+            counts[aliases.get(raw, "Unclassified")] += 1
+        details["log_severity_counts"] = counts
+
+    if not details.get("cvss_severity_counts"):
+        counts = {label: 0 for label in ("None", "Low", "Medium", "High", "Critical")}
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            try:
+                score = float(event.get("cvss_base_calculated"))
+            except (TypeError, ValueError):
+                continue
+            if not 0.0 <= score <= 10.0:
+                continue
+            severity = (
+                "None" if score == 0.0 else "Low" if score < 4.0 else
+                "Medium" if score < 7.0 else "High" if score < 9.0 else "Critical"
+            )
+            counts[severity] += 1
+        details["cvss_severity_counts"] = counts
+        details["cvss_unscored_count"] = len(events) - sum(counts.values())
+    return details
+
+
 def dashboard_analytics(db, user_id=None):
     """Build chart series from real visible scan records without retaining extra data."""
     scope = " WHERE user_hidden_at IS NULL" if user_id is not None else ""
@@ -179,6 +220,7 @@ def persisted_analysis_details(result):
     allowed = {
         "label", "explanation", "site_explanation", "redirect_chain", "indicators", "recommendations",
         "facts", "line_count", "counts", "event_categories", "log_events",
+        "log_severity_counts", "cvss_severity_counts", "cvss_unscored_count",
         "nessus_report_name", "nessus_findings", "nessus_counts", "nessus_total_items",
         "file_type", "size", "sha256", "findings", "analysis_scope",
     }
@@ -841,7 +883,7 @@ def create_app():
 
         return render_template(
             "log_analysis.html",
-            page_title="Log / Nessus Analysis",
+            page_title="Log Analysis",
             result=result,
             submitted_text=submitted_text,
         ), 429 if rate_limited else 200
@@ -910,6 +952,8 @@ def create_app():
             details = json.loads(details_value) if isinstance(details_value, str) else details_value
         except (TypeError, json.JSONDecodeError):
             details = {}
+        if isinstance(details, dict):
+            details = ensure_saved_log_summaries(details)
         return render_template(
             "scan_detail.html",
             page_title="Scan details",
@@ -939,6 +983,7 @@ def create_app():
             details = {}
         if not isinstance(details, dict):
             details = {}
+        details = ensure_saved_log_summaries(details)
         if viewer["role"] == "admin":
             record_admin_activity("Downloaded scan PDF", f"Scan #{scan_id}", f"Account: {scan['email']}")
         report = build_scan_pdf(scan, details, risk_level(scan["risk"]), ist_datetime(scan["created_at"]))

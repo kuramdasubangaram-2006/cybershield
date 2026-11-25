@@ -1,7 +1,7 @@
 {% extends "dashboard_base.html" %}
 {% block content %}
   <section class="welcome-row">
-    <div><p class="eyebrow">ANALYSIS TOOL</p><h2>Log &amp; Nessus Analysis</h2><p>Review security log events or import a Nessus scan report with its source findings.</p></div>
+    <div><p class="eyebrow">ANALYSIS TOOL</p><h2>Log Analysis</h2><p>Review security log events and vulnerability details found in the submitted data.</p></div>
     <span class="panel-tag">LOCAL KEYWORD CHECKS</span>
   </section>
 
@@ -23,7 +23,7 @@
   </section>
 
   {% if result %}
-    <section class="content-panel result-panel" aria-live="polite">
+    <section class="content-panel result-panel report-result" aria-live="polite">
       <div class="result-topline">
         <div><p class="eyebrow">ANALYSIS RESULT</p><h3>{{ result.label }}</h3></div>
         <span class="risk-pill risk-{{ result.risk|risk_level|lower }}">{{ result.risk|risk_level }}</span>
@@ -31,13 +31,35 @@
       <p class="result-summary">{{ result.summary }}</p>
       <p class="result-summary">{{ result.explanation }}</p>
       <p class="role-note left-note">{{ result.analysis_scope }}</p>
+      {% if result.log_severity_counts %}
+        <div class="indicator-block">
+          <h4>Input log severity levels</h4>
+          <p>Counts reflect explicit severity labels in the logs; unlabeled or other levels appear under Unclassified. These counts are not CVSS scores.</p>
+          <div class="nessus-severity-bars" role="img" aria-label="Log severity counts">
+            {% for severity, count in result.log_severity_counts.items() %}
+              <div class="nessus-severity-row severity-{{ severity|lower }}"><span>{{ severity }}</span><span class="nessus-severity-track"><span class="nessus-bar-{{ severity|lower }}" style="width: {{ (count * 100 / result.line_count)|round(1) }}%"></span></span><strong>{{ count }}</strong></div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+      {% if result.cvss_severity_counts %}
+        <div class="indicator-block cvss-chart-panel">
+          <h4>CVSS v3.1 Base Score Distribution</h4>
+          <p>Calculated only from complete v3.1 vectors: {{ result.cvss_unscored_count }} event(s) have no usable vector and remain unscored. Bands: None 0.0, Low 0.1–3.9, Medium 4.0–6.9, High 7.0–8.9, Critical 9.0–10.0. CVSS describes vulnerability impact, not whether a log event is malicious.</p>
+          <div class="nessus-severity-bars" role="img" aria-label="Calculated CVSS v3.1 severity counts">
+            {% for severity, count in result.cvss_severity_counts.items() %}
+              <div class="nessus-severity-row severity-{{ severity|lower }}"><span>{{ severity }}</span><span class="nessus-severity-track"><span class="nessus-bar-{{ severity|lower }}" style="width: {{ (count * 100 / (result.cvss_severity_counts.values()|sum))|round(1) if result.cvss_severity_counts.values()|sum else 0 }}%"></span></span><strong>{{ count }}</strong></div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
       {% if result.nessus_findings %}
         <div class="indicator-block">
           <h4>Nessus source severity distribution</h4>
           <p>Severity labels below come from the uploaded Nessus report. CyberShield did not run a network scan.</p>
           <div class="nessus-severity-bars" role="img" aria-label="Nessus findings by imported severity">
             {% for severity, count in result.nessus_counts.items() %}
-              <div class="nessus-severity-row"><span>{{ severity }}</span><span class="nessus-severity-track"><span class="nessus-bar-{{ severity|lower }}" style="width: {{ (count * 100 / result.nessus_total_items)|round(1) }}%"></span></span><strong>{{ count }}</strong></div>
+              <div class="nessus-severity-row severity-{{ severity|lower }}"><span>{{ severity }}</span><span class="nessus-severity-track"><span class="nessus-bar-{{ severity|lower }}" style="width: {{ (count * 100 / result.nessus_total_items)|round(1) }}%"></span></span><strong>{{ count }}</strong></div>
             {% endfor %}
           </div>
         </div>
