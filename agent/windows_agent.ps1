@@ -20,12 +20,14 @@ Write-Host 'Run this window as Administrator. Press Ctrl+C to stop.'
 $secureToken = Read-Host 'Paste the private device token' -AsSecureString
 $tokenPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)
 try {
-    $agentToken = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($tokenPointer)
+    $agentToken = ([Runtime.InteropServices.Marshal]::PtrToStringBSTR($tokenPointer)).Trim()
 }
 finally {
     [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($tokenPointer)
 }
-if ([string]::IsNullOrWhiteSpace($agentToken)) { throw 'A device token is required.' }
+if ($agentToken -notmatch '^[A-Za-z0-9_-]{32,128}$') {
+    throw 'The device token format is invalid. Copy the full token again from CyberShield Windows Agents.'
+}
 
 $stateDirectory = Join-Path $env:LOCALAPPDATA 'CyberShield'
 $statePath = Join-Path $stateDirectory 'windows-agent-state.json'
@@ -137,7 +139,11 @@ while ($true) {
             }
         }
         catch {
-            Write-Warning "Could not read new events from '$($channel.Name)': $($_.Exception.Message)"
+            $noMatchingEvents = $_.FullyQualifiedErrorId -match 'NoMatchingEventsFound' -or
+                $_.Exception.Message -match 'No events were found that match'
+            if (-not $noMatchingEvents) {
+                Write-Warning "Could not read new events from '$($channel.Name)': $($_.Exception.Message)"
+            }
         }
     }
 
