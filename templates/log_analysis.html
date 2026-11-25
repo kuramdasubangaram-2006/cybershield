@@ -117,8 +117,8 @@
           <h4>Parsed log events and network details</h4>
           <p>All non-empty input lines are included. “Not present” means a field was not recognized in that line; unlabelled addresses are kept separate instead of guessed as source or destination. CVSS describes vulnerability severity, separate from the log activity risk label.</p>
           <div class="table-responsive">
-            <table class="table table-sm align-middle">
-              <thead><tr><th>Line / time</th><th>Event / level</th><th>Source IP : port</th><th>Destination IP : port</th><th>Protocol</th><th>CVE / CVSS as written</th></tr></thead>
+            <table class="table table-sm align-middle log-events-table">
+              <thead><tr><th>Line / time</th><th>Event / level</th><th>Source IP : port</th><th>Destination IP : port</th><th>Protocol</th><th>CVE IDs</th><th>CVSS details</th></tr></thead>
               <tbody>
                 {% for event in result.log_events %}
                   <tr>
@@ -127,9 +127,10 @@
                     <td><code>{{ event.source_ip }}{% if event.source_port != 'Not present' %}:{{ event.source_port }}{% endif %}</code>{% if event.other_ips %}<br><small>Unattributed: {{ event.other_ips|join(', ') }}</small>{% endif %}</td>
                     <td><code>{{ event.destination_ip }}{% if event.destination_port != 'Not present' %}:{{ event.destination_port }}{% endif %}</code></td>
                     <td>{{ event.protocol }}</td>
-                    <td>{% if event.cves %}{{ event.cves|join(', ') }}<br>{% endif %}Reported: {{ event.cvss_as_reported }} ({{ event.cvss_reported_severity }})<br>Calculated v3.1 Base: {{ event.cvss_base_calculated }} ({{ event.cvss_severity }})<br><small>{{ event.cvss_vector_as_reported }} {{ event.cvss_note }}</small></td>
+                    <td>{% if event.cves %}{% for cve in event.cves %}<a class="cve-reference" href="https://nvd.nist.gov/vuln/detail/{{ cve }}" target="_blank" rel="noopener noreferrer">{{ cve }}</a>{% if not loop.last %}<br>{% endif %}{% endfor %}{% else %}<span class="report-muted">—</span>{% endif %}</td>
+                    <td class="cvss-details-cell">{% if event.cvss_as_reported != 'Not present' or event.cvss_vector_as_reported != 'Not present' %}{% if event.cvss_as_reported != 'Not present' %}<strong>As reported:</strong> {{ event.cvss_as_reported }} / {{ event.cvss_reported_severity }}<br>{% endif %}{% if event.cvss_base_calculated != 'Not calculated' %}<strong>Calculated v3.1 Base:</strong> {{ event.cvss_base_calculated }} / {{ event.cvss_severity }}<br>{% endif %}{% if event.cvss_vector_as_reported != 'Not present' %}<code class="cvss-vector">{{ event.cvss_vector_as_reported }}</code><br>{% endif %}<small class="cvss-note">{{ event.cvss_note }}</small>{% else %}<span class="report-muted">No CVSS supplied</span>{% endif %}</td>
                   </tr>
-                  <tr><td colspan="6"><details><summary>Extracted fields and sanitized line</summary>
+                  <tr><td colspan="7"><details><summary>Extracted fields and sanitized line</summary>
                     {% if event.fields %}<ul>{% for key, value in event.fields.items() %}<li><code>{{ key }}</code>: {{ value }}</li>{% endfor %}</ul>{% endif %}
                     <pre class="log-line-excerpt">{{ event.line_excerpt }}</pre>
                   </details></td></tr>
@@ -137,6 +138,19 @@
               </tbody>
             </table>
           </div>
+        </div>
+      {% endif %}
+      {% if result.log_events %}
+        <div class="indicator-block mitigation-guidance">
+          <h4>Mitigation guidance and trusted sources</h4>
+          <p>Log text alone does not confirm that a product is affected. Check the exact product and version, validate the finding in the original scanner, and open each CVE record for its affected versions and vendor advisory references.</p>
+          <ol class="detail-list">
+            <li>When affected, apply the fix or upgrade recommended by the product vendor, then verify the installed version and rescan.</li>
+            <li>If a fix cannot be applied yet, use a temporary vendor/CISA-supported mitigation such as restricting exposure, isolating the affected service, or disabling the vulnerable feature where safe. Track it until patched.</li>
+            <li>Prioritize CVEs listed in CISA’s Known Exploited Vulnerabilities catalog, while considering asset exposure and business impact.</li>
+          </ol>
+          <div class="report-source-links"><a href="https://nvd.nist.gov/vuln/" target="_blank" rel="noopener noreferrer">NIST NVD CVE records and references</a><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" target="_blank" rel="noopener noreferrer">CISA Known Exploited Vulnerabilities catalog</a><a href="https://www.cisa.gov/sites/default/files/publications/Federal_Government_Cybersecurity_Incident_and_Vulnerability_Response_Playbooks_508C.pdf" target="_blank" rel="noopener noreferrer">CISA vulnerability response playbook</a><a href="https://www.first.org/cvss/v3.1/specification-document" target="_blank" rel="noopener noreferrer">FIRST CVSS v3.1 specification</a></div>
+          <p class="scanner-privacy-note">These are general response steps, not a CVE-specific patch recommendation. The input did not establish affected products or versions; follow the relevant vendor advisory before changing production systems.</p>
         </div>
       {% endif %}
       {% endif %}

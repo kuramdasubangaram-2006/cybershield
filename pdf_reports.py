@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from html import escape
 from collections import Counter
+import re
 from urllib.parse import urlsplit, urlunsplit
 
 from reportlab.lib import colors
@@ -207,7 +208,11 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
             if event.get("destination_port") not in (None, "Not present"):
                 destination += f" port {event['destination_port']}"
             other_ips = ", ".join(event.get("other_ips", [])) or "Not present"
-            cve_text = ", ".join(event.get("cves", [])) or "Not present"
+            cves = [value for value in event.get("cves", []) if re.fullmatch(r"CVE-\d{4}-\d{4,}", str(value))]
+            cve_links = "<br/>".join(
+                f'<link href="https://nvd.nist.gov/vuln/detail/{escape(str(cve))}" color="#087d91">{escape(str(cve))}</link>'
+                for cve in cves
+            ) or "No CVE IDs"
             parsed_fields = "; ".join(
                 f"{key}={value}" for key, value in event.get("fields", {}).items()
             ) or "No structured fields recognized"
@@ -217,29 +222,30 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
                 or event.get("cvss_as_reported") not in (None, "Not present")
             )
             if has_vulnerability_data:
-                cvss_details = (
-                    f"CVSS score as written: {event.get('cvss_as_reported', 'Not present')} | "
-                    f"Reported severity: {event.get('cvss_reported_severity', 'Not assigned')} | "
-                    f"Calculated CVSS v3.1 Base: {event.get('cvss_base_calculated', 'Not calculated')} "
-                    f"({event.get('cvss_severity', 'Not assigned')}) | "
-                    f"Vector as written: {event.get('cvss_vector_as_reported', 'Not present')}"
-                )
-                cvss_details += f" | {event.get('cvss_note', 'No CVSS verification performed.')}"
+                cvss_parts = []
+                if event.get("cvss_as_reported") not in (None, "Not present"):
+                    cvss_parts.append(f"As reported: {event.get('cvss_as_reported')} ({event.get('cvss_reported_severity', 'Not assigned')})")
+                if event.get("cvss_base_calculated") not in (None, "Not calculated"):
+                    cvss_parts.append(f"Calculated v3.1 Base: {event.get('cvss_base_calculated')} ({event.get('cvss_severity', 'Not assigned')})")
+                if event.get("cvss_vector_as_reported") not in (None, "Not present"):
+                    cvss_parts.append(f"Vector: {event.get('cvss_vector_as_reported')}")
+                if event.get("cvss_note"):
+                    cvss_parts.append(event["cvss_note"])
+                cvss_details = "<br/>".join(escape(_pdf_text(part)) for part in cvss_parts) or "No CVSS supplied"
             else:
-                cvss_details = "CVE/CVSS: Not present"
+                cvss_details = "No CVSS supplied"
             event_rows = [
                 [paragraph(f"Line {event.get('line', '?')} | {event.get('timestamp', 'Not present')} | {event.get('timestamp_status', 'Timestamp not validated')}", small_style), paragraph(str(event.get("severity", "Not specified")), small_style)],
                 [paragraph(f"Event: {event.get('event', 'Event')}", body_style), ""],
                 [paragraph(f"Source: {source}", small_style), paragraph(f"Destination: {destination}", small_style)],
                 [paragraph(f"Protocol: {event.get('protocol', 'Not present')}", small_style), paragraph(f"Other IPs: {other_ips}", small_style)],
-                [paragraph(f"CVE: {cve_text} | {cvss_details}", small_style), ""],
+                [Paragraph("<b>CVE IDs</b><br/>" + cve_links, small_style), Paragraph("<b>CVSS details</b><br/>" + cvss_details, small_style)],
                 [paragraph(f"Extracted fields: {parsed_fields}", small_style), ""],
                 [paragraph(f"Sanitized log line: {event.get('line_excerpt', '')}", small_style), ""],
             ]
             card = Table(event_rows, colWidths=[87 * mm, 87 * mm], hAlign="LEFT")
             card.setStyle(TableStyle([
                 ("SPAN", (0, 1), (-1, 1)),
-                ("SPAN", (0, 4), (-1, 4)),
                 ("SPAN", (0, 5), (-1, 5)),
                 ("SPAN", (0, 6), (-1, 6)),
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e2f2f5")),
@@ -256,6 +262,23 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
                 story.append(KeepTogether([log_section_heading, card, Spacer(1, 2 * mm)]))
             else:
                 story.append(KeepTogether([card, Spacer(1, 2 * mm)]))
+        story.append(Paragraph("Mitigation guidance and trusted sources", heading_style))
+        story.append(paragraph("Log text alone does not confirm that a product is affected. Check the exact product and version, validate each finding in the original scanner, and review the affected versions and vendor advisory references in the CVE record.", small_style))
+        for action in (
+            "When affected, apply the fix or upgrade recommended by the product vendor, then verify the installed version and rescan.",
+            "If a fix cannot be applied yet, use a temporary vendor/CISA-supported mitigation such as restricting exposure, isolating the affected service, or disabling the vulnerable feature where safe. Track it until patched.",
+            "Prioritize CVEs in CISA’s Known Exploited Vulnerabilities catalog while considering asset exposure and business impact.",
+        ):
+            story.append(Paragraph("- " + escape(_pdf_text(action)), body_style))
+        references = (
+            ("NIST NVD CVE records and references", "https://nvd.nist.gov/vuln/"),
+            ("CISA Known Exploited Vulnerabilities catalog", "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"),
+            ("CISA vulnerability response playbook", "https://www.cisa.gov/sites/default/files/publications/Federal_Government_Cybersecurity_Incident_and_Vulnerability_Response_Playbooks_508C.pdf"),
+            ("FIRST CVSS v3.1 specification", "https://www.first.org/cvss/v3.1/specification-document"),
+        )
+        for label, url in references:
+            story.append(Paragraph(f'- <link href="{escape(url)}" color="#087d91">{escape(label)}</link>', small_style))
+        story.append(paragraph("These are general response steps, not a CVE-specific patch recommendation. The input did not establish affected products or versions; follow the relevant vendor advisory before changing production systems.", small_style))
     elif scan["module"] == "Log Analysis":
         add_section("Log detail availability", [
             "Line-level data is not available for this earlier scan because the original log text was not retained. Rerun the analysis to generate the expanded event report."
