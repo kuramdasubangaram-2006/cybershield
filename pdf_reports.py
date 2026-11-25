@@ -135,6 +135,21 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
         add_section("Detailed explanation", [details["explanation"]])
     if details.get("site_explanation"):
         add_section("Website response details", [details["site_explanation"]])
+    if details.get("social_links") is not None and scan["module"] == "URL Scanner":
+        social_links = details.get("social_links") or []
+        if details.get("social_links_checked"):
+            add_section("Social platform links published on fetched page", [
+                f"{item.get('platform', 'Social site')}: {item.get('url', '')}" for item in social_links
+            ] or ["No recognized social links were found in the fetched page HTML."])
+        else:
+            add_section("Social platform links", ["Not checked because the website response was not HTML."])
+        add_section("Social link verification limit", [
+            "These links were present in the fetched page HTML. CyberShield did not verify account ownership or search other pages or social platforms."
+        ])
+        if details.get("social_links_truncated"):
+            add_section("Social link collection limit", ["More than 25 recognized links were found; this report lists the first 25."])
+        if details.get("social_links_incomplete"):
+            add_section("Social link response limit", ["The HTML response exceeded the review size cap; social-link results may be incomplete."])
     if details.get("analysis_scope"):
         if scan["module"] == "Log Analysis":
             add_section("Analysis scope", ["Local text-pattern review only. CVEs, affected products, and scanner findings were not independently verified; no live threat-intelligence lookup was performed."])

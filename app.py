@@ -221,7 +221,7 @@ def dashboard_analytics(db, user_id=None):
 def persisted_analysis_details(result):
     """Keep derived findings only; never persist uploaded bytes or pasted log text."""
     allowed = {
-        "label", "explanation", "site_explanation", "redirect_chain", "indicators", "recommendations",
+        "label", "explanation", "site_explanation", "redirect_chain", "social_links", "social_links_truncated", "social_links_checked", "social_links_incomplete", "indicators", "recommendations",
         "facts", "line_count", "counts", "event_categories", "log_events",
         "log_severity_counts", "cvss_severity_counts", "cvss_unscored_count",
         "nessus_report_name", "nessus_findings", "nessus_counts", "nessus_total_items",
@@ -250,6 +250,10 @@ def analyze_url_live(value):
     result["site_explanation"] = site["explanation"]
     result["explanation"] = "CyberShield checked URL structure and fetched limited public page metadata. It did not compare the URL with threat-intelligence reports, so the findings are not a safety verdict."
     result["redirect_chain"] = site["redirect_chain"]
+    result["social_links"] = site["social_links"]
+    result["social_links_truncated"] = site["social_links_truncated"]
+    result["social_links_checked"] = site["social_links_checked"]
+    result["social_links_incomplete"] = site["social_links_incomplete"]
     if site.get("password_form_over_http"):
         result["risk"] = "High"
         result["label"] = "Password form served without HTTPS"

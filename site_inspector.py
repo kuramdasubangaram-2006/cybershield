@@ -3,6 +3,7 @@
 from html.parser import HTMLParser
 import http.client
 import ipaddress
+import json
 import re
 import socket
 import ssl
@@ -12,6 +13,34 @@ from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 MAX_HTML_BYTES = 512 * 1024
 TIMEOUT_SECONDS = 5
 MAX_REDIRECTS = 3
+SOCIAL_DOMAINS = {
+    "Facebook": ("facebook.com",),
+    "Instagram": ("instagram.com",),
+    "LinkedIn": ("linkedin.com",),
+    "X / Twitter": ("x.com", "twitter.com"),
+    "YouTube": ("youtube.com", "youtu.be"),
+    "TikTok": ("tiktok.com",),
+    "GitHub": ("github.com",),
+    "Reddit": ("reddit.com",),
+    "Pinterest": ("pinterest.com",),
+    "Telegram": ("t.me", "telegram.me"),
+    "WhatsApp": ("whatsapp.com", "wa.me"),
+    "Threads": ("threads.net",),
+    "Snapchat": ("snapchat.com",),
+    "Twitch": ("twitch.tv",),
+    "Discord": ("discord.com", "discord.gg"),
+    "Bluesky": ("bsky.app",),
+    "Medium": ("medium.com",),
+    "Quora": ("quora.com",),
+}
+
+
+def _social_platform(host):
+    host = (host or "").rstrip(".").lower()
+    for platform, domains in SOCIAL_DOMAINS.items():
+        if any(host == domain or host.endswith("." + domain) for domain in domains):
+            return platform
+    return None
 
 
 class _PinnedHTTPConnection(http.client.HTTPConnection):
@@ -52,10 +81,24 @@ class _PageFacts(HTMLParser):
         self.scripts = 0
         self.iframes = 0
         self.images = 0
+        self.h1_count = 0
+        self.language = ""
+        self.canonical_url = ""
+        self.robots_directive = ""
+        self.social_links = []
+        self._social_keys = set()
+        self.social_links_truncated = False
+        self.json_ld_active = False
+        self.json_ld_parts = []
+        self.json_ld_scripts = 0
+        self.structured_names = []
+        self.structured_types = []
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
-        if tag == "title":
+        if tag == "html":
+            self.language = (values.get("lang") or "")[:80]
+        elif tag == "title":
             self.in_title = True
         elif tag == "meta":
             key = (values.get("name") or values.get("property") or "").lower()
@@ -64,14 +107,35 @@ class _PageFacts(HTMLParser):
             elif key == "og:title": self.og_title = content[:300]
             elif key == "og:description": self.og_description = content[:500]
             elif key == "og:image": self.og_image = content[:2048]
+            elif key == "robots": self.robots_directive = content[:300]
+        elif tag == "link" and "canonical" in (values.get("rel") or "").lower().split():
+            try:
+                canonical = urlsplit(urljoin(self.base.geturl(), values.get("href") or ""))
+                if canonical.scheme.lower() in {"http", "https"} and canonical.hostname:
+                    self.canonical_url = urlunsplit((canonical.scheme.lower(), canonical.netloc, canonical.path or "/", "", ""))[:2048]
+            except ValueError:
+                pass
+        elif tag == "h1":
+            self.h1_count += 1
         elif tag == "a" and values.get("href"):
             self.links += 1
-            destination = urlsplit(urljoin(urlunsplit((self.base.scheme, self.base.netloc, "/", "", "")), values["href"]))
-            if destination.hostname and destination.hostname.lower() != (self.base.hostname or "").lower():
+            try:
+                destination = urlsplit(urljoin(self.base.geturl(), values["href"]))
+            except ValueError:
+                return
+            destination_host = (destination.hostname or "").lower()
+            if destination_host and destination_host != (self.base.hostname or "").lower():
                 self.external_links += 1
+            self._add_social_link(destination.geturl())
         elif tag == "form": self.forms += 1
         elif tag == "input" and (values.get("type") or "").lower() == "password": self.password_fields += 1
-        elif tag == "script" and values.get("src"): self.scripts += 1
+        elif tag == "script":
+            if values.get("src"):
+                self.scripts += 1
+            self.json_ld_active = (values.get("type") or "").split(";", 1)[0].strip().lower() == "application/ld+json"
+            self.json_ld_parts = []
+            if self.json_ld_active:
+                self.json_ld_scripts += 1
         elif tag == "iframe": self.iframes += 1
         elif tag == "img": self.images += 1
 
@@ -79,10 +143,60 @@ class _PageFacts(HTMLParser):
         if tag == "title":
             self.in_title = False
             self.title = " ".join(" ".join(self.title_parts).split())[:300]
+        elif tag == "script" and self.json_ld_active:
+            self.json_ld_active = False
+            raw_json = "".join(self.json_ld_parts)
+            if len(raw_json.encode("utf-8", errors="ignore")) <= 65536:
+                try:
+                    self._collect_structured(json.loads(raw_json))
+                except (json.JSONDecodeError, TypeError, RecursionError):
+                    pass
+            self.json_ld_parts = []
 
     def handle_data(self, data):
         if self.in_title and len("".join(self.title_parts)) < 300:
             self.title_parts.append(data)
+        if self.json_ld_active and sum(map(len, self.json_ld_parts)) < 65536:
+            self.json_ld_parts.append(data[:65536])
+
+    def _add_social_link(self, value):
+        try:
+            destination = urlsplit(urljoin(self.base.geturl(), value))
+        except ValueError:
+            return
+        platform = _social_platform(destination.hostname)
+        if (not platform or destination.scheme.lower() not in {"http", "https"}
+                or destination.username is not None or destination.password is not None):
+            return
+        clean_url = urlunsplit((destination.scheme.lower(), destination.netloc, destination.path or "/", "", ""))[:2048]
+        key = (platform, clean_url)
+        if key not in self._social_keys and len(self.social_links) < 25:
+            self._social_keys.add(key)
+            self.social_links.append({"platform": platform, "url": clean_url})
+        elif key not in self._social_keys:
+            self.social_links_truncated = True
+
+    def _collect_structured(self, value, depth=0):
+        if depth > 10:
+            return
+        if isinstance(value, dict):
+            raw_type = value.get("@type")
+            for item in (raw_type if isinstance(raw_type, list) else [raw_type]):
+                if isinstance(item, str) and item not in self.structured_types and len(self.structured_types) < 10:
+                    self.structured_types.append(item[:100])
+            name = value.get("name")
+            if isinstance(name, str) and name.strip() and name.strip() not in self.structured_names and len(self.structured_names) < 10:
+                self.structured_names.append(name.strip()[:200])
+            same_as = value.get("sameAs")
+            for link in (same_as if isinstance(same_as, list) else [same_as]):
+                if isinstance(link, str):
+                    self._add_social_link(link[:2048])
+            for child in value.values():
+                if isinstance(child, (dict, list)):
+                    self._collect_structured(child, depth + 1)
+        elif isinstance(value, list):
+            for child in value[:100]:
+                self._collect_structured(child, depth + 1)
 
 
 def _validate_public_url(value):
@@ -196,6 +310,8 @@ def inspect_public_site(value):
         "Content type": content_type,
         "Response size checked": f"At most {MAX_HTML_BYTES // 1024} KB" + (" (truncated)" if page["truncated"] else ""),
         "HTTPS": "Yes" if page["url"].startswith("https://") else "No",
+        "Page scope": "One fetched page; linked pages were not crawled.",
+        "Threat reputation": "Not queried — no threat-intelligence provider is connected.",
     }
     tls = page["certificate"]
     if tls:
@@ -234,6 +350,15 @@ def inspect_public_site(value):
             "Script tags found": str(parser.scripts),
             "Iframes found": str(parser.iframes),
             "Image tags found": str(parser.images),
+            "H1 headings found": str(parser.h1_count),
+            "Page language": parser.language or "Not declared",
+            "Canonical URL": parser.canonical_url or "Not provided",
+            "Robots meta directive": parser.robots_directive or "Not provided",
+            "Social platform links found": str(len(parser.social_links)),
+            "JSON-LD blocks found": str(parser.json_ld_scripts),
+            "Page-declared schema types": ", ".join(parser.structured_types) or "Not provided",
+            "Page-declared names": "; ".join(parser.structured_names) or "Not provided",
+            "Social links beyond display cap": "Yes" if parser.social_links_truncated else "No",
         })
         if parser.og_image:
             image_host = urlsplit(urljoin(page["url"], parser.og_image)).hostname
@@ -250,6 +375,10 @@ def inspect_public_site(value):
         "facts": facts,
         "indicators": indicators,
         "redirect_chain": [_report_url(url)[:2048] for url in chain],
+        "social_links": parser.social_links if content_type.lower().startswith(("text/html", "application/xhtml+xml")) else [],
+        "social_links_truncated": parser.social_links_truncated if content_type.lower().startswith(("text/html", "application/xhtml+xml")) else False,
+        "social_links_checked": content_type.lower().startswith(("text/html", "application/xhtml+xml")),
+        "social_links_incomplete": bool(page["truncated"]),
         "password_form_over_http": bool(
             content_type.lower().startswith(("text/html", "application/xhtml+xml"))
             and parser.password_fields and not page["url"].startswith("https://")

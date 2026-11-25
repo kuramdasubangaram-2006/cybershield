@@ -104,7 +104,19 @@ def analyze_ip(value):
     except ValueError as error:
         raise ValueError("Enter a valid IPv4 or IPv6 address.") from error
 
+    ipv4_private_networks = tuple(map(ipaddress.ip_network, ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")))
+    ipv4_documentation_networks = tuple(map(ipaddress.ip_network, ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24")))
+    is_shared = address.version == 4 and address in ipaddress.ip_network("100.64.0.0/10")
+    is_private_use = (
+        address.version == 4 and any(address in network for network in ipv4_private_networks)
+    ) or (address.version == 6 and address in ipaddress.ip_network("fc00::/7"))
+    is_documentation = (
+        address.version == 4 and any(address in network for network in ipv4_documentation_networks)
+    ) or (address.version == 6 and address in ipaddress.ip_network("2001:db8::/32"))
+    is_benchmark = address.version == 4 and address in ipaddress.ip_network("198.18.0.0/15")
+
     if address.is_loopback:
+        category = "Loopback"
         label = "Loopback address"
         risk = "Normal"
         summary = "This address points back to the same device; it is not a public reputation result."
@@ -112,27 +124,71 @@ def analyze_ip(value):
         recommendations = ["Confirm that a local-device address is what you intended to review."]
         explanation = "This address points back to the same device. It is a local network value, not a public site's reputation result."
     elif address.is_link_local:
+        category = "Link-local"
         label = "Link-local address"
         risk = "Normal"
         summary = "This address is used on a local network and is not globally reachable."
         indicators = ["The address is link-local."]
         recommendations = ["Compare the address with the expected local network range."]
         explanation = "A link-local address is normally used on the same local network segment and is not generally routed across the public internet."
-    elif address.is_private:
+    elif address.is_unspecified:
+        category = "Unspecified"
+        label = "Unspecified address"
+        risk = "Normal"
+        summary = "This is a special unspecified address, not a public host reputation result."
+        indicators = ["The address is an unspecified source/destination value."]
+        recommendations = ["Treat this as a placeholder or bind-to-all value and interpret it in the original network context."]
+        explanation = "An unspecified address is a special networking value. Its presence in a log is not by itself a threat verdict."
+    elif address.is_multicast:
+        category = "Multicast"
+        label = "Multicast address"
+        risk = "Normal"
+        summary = "This address is in a multicast range; it does not identify a single public host."
+        indicators = ["The address is reserved for multicast traffic."]
+        recommendations = ["Check whether multicast traffic is expected for the service and network involved."]
+        explanation = "Multicast addresses identify groups of network destinations. Their use should be interpreted with the surrounding traffic, not treated as malicious on its own."
+    elif is_shared:
+        category = "Shared address space (100.64.0.0/10)"
+        label = "Shared carrier-grade NAT address"
+        risk = "Normal"
+        summary = "This IPv4 range is shared address space commonly used between customer networks and carrier-grade NAT."
+        indicators = ["The address is not a globally routable public host address."]
+        recommendations = ["Use the surrounding device, timestamp, and port information to identify the customer or host; this range alone cannot do so."]
+        explanation = "100.64.0.0/10 is shared address space. It is not the same as an individually assigned public IP, and reputation cannot be inferred from the address alone."
+    elif is_documentation:
+        category = "Documentation / example range"
+        label = "Documentation address"
+        risk = "Normal"
+        summary = "This address belongs to a range reserved for examples and documentation, not normal public host attribution."
+        indicators = ["The address is a documentation/example value."]
+        recommendations = ["If this appeared in real telemetry, check whether the source data uses redacted or example addresses."]
+        explanation = "Documentation ranges are commonly used in examples and sanitized logs. They do not identify a real public host."
+    elif is_benchmark:
+        category = "Benchmark testing range (198.18.0.0/15)"
+        label = "Benchmark testing address"
+        risk = "Normal"
+        summary = "This range is reserved for network device benchmarking and should not be treated as an ordinary public address."
+        indicators = ["The address belongs to a benchmark testing range."]
+        recommendations = ["Confirm that benchmark traffic is expected in this environment."]
+        explanation = "198.18.0.0/15 is set aside for benchmarking. Its range classification is not a maliciousness finding."
+    elif is_private_use:
+        category = "Private-use network"
         label = "Private network address"
         risk = "Normal"
         summary = "This address belongs to a private network; its public threat reputation cannot be checked here."
         indicators = ["The address is not globally routable."]
         recommendations = ["Compare the address with the expected private network range."]
         explanation = "Private addresses are reused inside homes and organizations. The format check can identify that range, but it cannot tell whether activity from a particular device is trustworthy."
-    elif address.is_multicast or address.is_unspecified or address.is_reserved:
+    elif address.is_reserved:
+        category = "Reserved / special-use"
         label = "Special-purpose address"
-        risk = "Low"
-        summary = "This is a special-purpose address, not a normal public host reputation result."
+        risk = "Normal"
+        summary = "This address is classified for a special networking purpose; that classification alone is not a threat verdict."
         indicators = ["The address is reserved for a special networking purpose."]
         recommendations = ["Confirm this special-purpose address is expected in your network context."]
-        explanation = "This address range is reserved for a networking purpose rather than ordinary public hosting. Confirm that the value makes sense for the system you are checking."
+        explanation = "This address belongs to a special-use category. That is a network classification, not evidence that the address is malicious."
     elif address.is_global:
+        category = "Globally routable"
         label = "Public IP — reputation unverified"
         risk = "Normal"
         summary = "The address is globally routable. No threat-intelligence source is connected, so its reputation is unknown."
@@ -140,12 +196,26 @@ def analyze_ip(value):
         recommendations = ["Check an approved threat-intelligence source before trusting this public address."]
         explanation = "This is a globally routable address, but global reachability does not reveal its owner or reputation. CyberShield checked only the address format and range."
     else:
+        category = "Other non-global / special-use"
         label = "Non-public address"
         risk = "Normal"
         summary = "This address is not globally routable. No public threat reputation was checked."
         indicators = ["The address is outside the public global address space."]
         recommendations = ["Compare the address with the expected network range; no public reputation check was performed."]
         explanation = "The address is outside the public global range. This local classification says nothing about whether the related activity was expected."
+
+    facts = {
+        "IP version": f"IPv{address.version}",
+        "Canonical address": address.compressed,
+        "Address category": category,
+        "Globally routable": "Yes" if address.is_global else "No",
+        "Reverse DNS": "Not queried",
+        "ASN / ISP / geolocation": "Not queried — no data source is connected.",
+        "Threat reputation": "Not queried — no threat-intelligence provider is connected.",
+        "CVSS Base score": "Not applicable — an IP format check is not a CVE vulnerability assessment.",
+    }
+    if getattr(address, "ipv4_mapped", None):
+        facts["IPv4-mapped address"] = str(address.ipv4_mapped)
 
     return {
         "label": label,
@@ -154,7 +224,7 @@ def analyze_ip(value):
         "indicators": indicators,
         "explanation": explanation,
         "recommendations": recommendations,
-        "facts": {"IP version": f"IPv{address.version}", "Globally routable": "Yes" if address.is_global else "No"},
+        "facts": facts,
         "target": str(address),
     }
 
@@ -242,6 +312,8 @@ def analyze_url(value):
             "Subdomain levels": str(max(0, len(hostname_labels) - 2)),
             "URL length": f"{len(raw_url)} characters",
             "CVSS Base score": "Not assigned — this URL review did not identify a CVE-based software vulnerability.",
+            "Site / account ownership": "Not verified.",
+            "Other pages crawled": "No — only the submitted page is considered.",
         },
         "target": raw_url,
     }
@@ -441,7 +513,13 @@ def analyze_file(filename, content):
     }
     indicators = []
     findings = []
-    facts = {"Detected type": detected_type, "File size": f"{size} bytes", "Extension": suffix or "None"}
+    facts = {
+        "Detected type": detected_type,
+        "File size": f"{size} bytes",
+        "Extension": suffix or "None",
+        "Antivirus / file reputation": "Not checked — no antivirus or reputation provider is connected.",
+        "CVSS Base score": "Not applicable — static file indicators are not CVE-based vulnerability findings.",
+    }
     review_caution = False
     confirmed_warning = False
     if detected_type in executable_types:

@@ -31,15 +31,12 @@
       <p class="result-summary">{{ result.summary }}</p>
       <p class="result-summary">{{ result.explanation }}</p>
       {% if result.analysis_scope %}<p class="scanner-privacy-note">{{ result.analysis_scope }}</p>{% endif %}
-      <div class="file-facts">
-        <div><span>Detected type</span><strong>{{ result.file_type }}</strong></div>
-        <div><span>File size</span><strong>{{ result.size }} bytes</strong></div>
-        <div class="hash-fact"><span>SHA-256</span><code>{{ result.sha256 }}</code></div>
-      </div>
+      <div class="scan-detail-facts">{% for label, value in result.facts.items() %}<div><span>{{ label }}</span><strong>{{ value }}</strong></div>{% endfor %}<div class="hash-fact"><span>SHA-256</span><code>{{ result.sha256 }}</code></div></div>
       {% if result.findings %}
         <div class="indicator-block"><h4>Detailed static findings</h4><ul>{% for finding in result.findings %}<li><strong>{{ finding.severity }} — {{ finding.name }}:</strong> {{ finding.detail }}</li>{% endfor %}</ul></div>
       {% endif %}
       <div class="indicator-block"><h4>Observed indicators</h4><ul>{% for indicator in result.indicators %}<li>{{ indicator }}</li>{% endfor %}</ul></div>
+      {% if result.recommendations %}<div class="indicator-block"><h4>Suggested next steps</h4><ul>{% for item in result.recommendations %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
       {% if result.scan_id %}<div class="detail-action-row mt-3"><a class="primary-link" href="{{ url_for('scan_detail', scan_id=result.scan_id) }}">Open detailed result <span aria-hidden="true">→</span></a></div>{% else %}<p class="scanner-privacy-note">This guest result is temporary. Create an account to save future reports.</p>{% endif %}
     </section>
   {% endif %}
