@@ -155,7 +155,7 @@
     <div class="panel-heading"><div><h3>How to read this risk level</h3><p>CyberShield uses local checks and cannot guarantee that an item is safe.</p></div></div>
     <p class="result-summary">
       {% if details.nessus_findings %}The overall level reflects the highest Nessus severity included in this import. It is a source scanner result, not an independent CyberShield verification.
-      {% elif scan.risk|risk_level == 'Normal' %}Normal means these checks found no configured warning. The item may still be risky because live reputation and antivirus checks were not performed.
+      {% elif scan.risk|risk_level == 'Info' %}Info means these checks found no configured warning. The item may still be risky because live reputation and antivirus checks were not performed.
       {% elif scan.risk|risk_level == 'Low' %}Low means one or more caution signs matched. Review the indicators and context before acting.
       {% elif scan.risk|risk_level == 'Medium' %}Medium means the imported source scanner reported a medium-severity finding. Verify the asset and evidence in the original scanner.
       {% elif scan.risk|risk_level == 'High' and scan.module == 'Log Analysis' %}High means the supplied log contains a correlated authentication pattern needing prompt review. It is not proof of compromise.

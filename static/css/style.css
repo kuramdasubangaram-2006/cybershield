@@ -229,6 +229,7 @@ body.login-page {
 .data-table tbody tr:last-child td { border-bottom: 0; }
 .risk-pill, .role-pill { display: inline-block; padding: 4px 7px; border-radius: 99px; background: rgba(132, 152, 176, 0.12); color: #b2c0d2; font-size: 0.61rem; font-weight: 700; text-transform: uppercase; }
 .risk-normal { background: rgba(66, 216, 164, 0.12); color: #8de8bf; }
+.risk-info { background: rgba(66, 216, 164, 0.12); color: #8de8bf; }
 .risk-low { background: rgba(101, 164, 255, 0.12); color: #a8caff; }
 .risk-medium { background: rgba(197, 139, 255, 0.14); color: #dfbdff; }
 .risk-high { background: rgba(255, 183, 79, 0.14); color: #ffd084; }
@@ -608,6 +609,7 @@ body.login-page {
 .risk-legend-row strong { color: #f2f6ff; font-size: 0.75rem; }
 .risk-swatch { width: 9px; height: 9px; border-radius: 3px; }
 .risk-swatch-normal { background: #34d399; box-shadow: 0 0 9px rgba(52, 211, 153, 0.4); }
+.risk-swatch-info { background: #34d399; box-shadow: 0 0 9px rgba(52, 211, 153, 0.4); }
 .risk-swatch-low { background: #55b8ff; box-shadow: 0 0 9px rgba(85, 184, 255, 0.4); }
 .risk-swatch-high { background: #ffb84d; box-shadow: 0 0 9px rgba(255, 184, 77, 0.4); }
 .risk-swatch-critical { background: #ff5878; box-shadow: 0 0 9px rgba(255, 88, 120, 0.4); }
@@ -1862,6 +1864,13 @@ body.login-page.auth-screen .login-card .form-control:hover {
 .dashboard-page .dashboard-content .report-result .report-more { margin: 10px 0; }
 .dashboard-page .dashboard-content.scan-detail-page .report-more > summary,
 .dashboard-page .dashboard-content .report-result .report-more > summary { color: #86ddff; cursor: pointer; font-weight: 650; }
+.dashboard-page .dashboard-content .scanner-panel {
+  border-color: rgba(121, 172, 238, .38);
+  background: linear-gradient(145deg, rgba(7, 18, 40, .48), rgba(12, 28, 57, .40));
+  box-shadow: 0 16px 38px rgba(2, 9, 25, .28), inset 0 1px rgba(197, 224, 255, .08);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
 .dashboard-page .dashboard-content :is(h2, h3, h4, p, small, label, span, td, th, strong, code) {
   color: #f4f9ff;
   text-shadow: 0 1px 2px rgba(1, 8, 25, .98), 0 0 9px rgba(1, 8, 25, .82);

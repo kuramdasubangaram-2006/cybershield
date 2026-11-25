@@ -50,10 +50,10 @@ GUEST_FREE_SCANS = 4
 def risk_level(value):
     """Normalize current and older stored labels to the display scale."""
     return {
-        "informational": "Normal",
-        "unverified": "Normal",
+        "informational": "Info",
+        "unverified": "Info",
         "review": "Low",
-        "normal": "Normal",
+        "normal": "Info",
         "low": "Low",
         "medium": "Medium",
         "high": "High",
@@ -117,14 +117,14 @@ def dashboard_analytics(db, user_id=None):
         parameters,
     ).fetchall()
 
-    risk_counts = {label: 0 for label in ("Normal", "Low", "Medium", "High", "Critical")}
+    risk_counts = {label: 0 for label in ("Info", "Low", "Medium", "High", "Critical")}
     for row in risk_rows:
         label = risk_level(row["risk"])
         if label not in risk_counts:
             label = "Low"
         risk_counts[label] += row["count"]
     risk_total = sum(risk_counts.values())
-    risk_colors = {"Normal": "#34d399", "Low": "#55b8ff", "Medium": "#c58bff", "High": "#ffb84d", "Critical": "#ff5878"}
+    risk_colors = {"Info": "#34d399", "Low": "#55b8ff", "Medium": "#c58bff", "High": "#ffb84d", "Critical": "#ff5878"}
     risk_data = [
         {"label": label, "count": count, "percent": round(count * 100 / risk_total, 1) if risk_total else 0, "color": risk_colors[label]}
         for label, count in risk_counts.items()
@@ -1047,7 +1047,7 @@ def create_app():
             module_counts[scan["module"]] = module_counts.get(scan["module"], 0) + 1
         risk_counts = {
             level: sum(risk_level(scan["risk"]) == level for scan in scans)
-            for level in ("Normal", "Low", "Medium", "High", "Critical")
+            for level in ("Info", "Low", "Medium", "High", "Critical")
         }
         return render_template(
             "reports.html",
