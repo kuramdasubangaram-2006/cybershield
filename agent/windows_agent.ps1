@@ -17,16 +17,15 @@ Write-Host 'CyberShield Windows monitoring agent' -ForegroundColor Cyan
 Write-Host 'This agent sends only selected Windows event metadata over HTTPS.'
 Write-Host 'It does not send usernames, full event messages, or accept remote commands.'
 Write-Host 'Run this window as Administrator. Press Ctrl+C to stop.'
-$secureToken = Read-Host 'Paste the private device token' -AsSecureString
-$tokenPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)
 try {
-    $agentToken = ([Runtime.InteropServices.Marshal]::PtrToStringBSTR($tokenPointer)).Trim()
+    [void](Read-Host 'In CyberShield click Copy token, then press Enter here')
+    $agentToken = ([string](Get-Clipboard -Raw)).Trim()
 }
-finally {
-    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($tokenPointer)
+catch {
+    throw 'Could not read the clipboard. Copy the device token in CyberShield and try again.'
 }
 if ($agentToken -notmatch '^[A-Za-z0-9_-]{32,128}$') {
-    throw 'The device token format is invalid. Copy the full token again from CyberShield Windows Agents.'
+    throw 'The clipboard does not contain a valid device token. Copy it with the CyberShield Copy token button and try again.'
 }
 
 $stateDirectory = Join-Path $env:LOCALAPPDATA 'CyberShield'
