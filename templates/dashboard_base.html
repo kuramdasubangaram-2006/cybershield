@@ -38,6 +38,7 @@
           <a class="side-link {% if request.endpoint == 'analyze_uploaded_file' %}active{% endif %}" href="{{ url_for('analyze_uploaded_file') }}"><span>▤</span> File Analyzer</a>
           <a class="side-link {% if request.endpoint == 'analyze_log_text' %}active{% endif %}" href="{{ url_for('analyze_log_text') }}"><span>≋</span> Log Analysis</a>
           {% if current_user %}
+            <a class="side-link {% if request.endpoint in ['manage_agents', 'agent_dashboard_data'] %}active{% endif %}" href="{{ url_for('manage_agents') }}"><span>⌁</span> Windows Agents</a>
             <a class="side-link {% if request.endpoint == 'alerts_history' %}active{% endif %}" href="{{ url_for('alerts_history') }}"><span>◷</span> Alerts &amp; History</a>
             <a class="side-link {% if request.endpoint in ['reports', 'download_report'] %}active{% endif %}" href="{{ url_for('reports') }}"><span>▧</span> Reports</a>
             <a class="side-link {% if request.endpoint == 'change_password' %}active{% endif %}" href="{{ url_for('change_password') }}"><span>⚿</span> Change password</a>

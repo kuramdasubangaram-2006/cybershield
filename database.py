@@ -102,8 +102,56 @@ def init_db(app):
                 attempt_count INTEGER NOT NULL DEFAULT 0,
                 requested_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS endpoint_agents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_seen_at TEXT,
+                revoked_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS endpoint_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id INTEGER NOT NULL REFERENCES endpoint_agents(id) ON DELETE CASCADE,
+                source_ref TEXT NOT NULL,
+                event_time TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                event_id INTEGER NOT NULL,
+                source_ip TEXT,
+                source_port INTEGER,
+                destination_ip TEXT,
+                destination_port INTEGER,
+                network_protocol TEXT,
+                network_direction TEXT,
+                event_name TEXT NOT NULL,
+                alert_level TEXT,
+                alert_text TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(agent_id, source_ref)
+            );
+
+            CREATE INDEX IF NOT EXISTS endpoint_agents_user_idx
+                ON endpoint_agents(user_id, revoked_at);
+            CREATE INDEX IF NOT EXISTS endpoint_events_agent_created_idx
+                ON endpoint_events(agent_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS endpoint_events_failed_login_idx
+                ON endpoint_events(agent_id, event_id, source_ip, created_at);
             """
         )
+        endpoint_event_columns = {row["name"] for row in get_db().execute("PRAGMA table_info(endpoint_events)").fetchall()}
+        for column, sql_type in (
+            ("source_port", "INTEGER"),
+            ("destination_ip", "TEXT"),
+            ("destination_port", "INTEGER"),
+            ("network_protocol", "TEXT"),
+            ("network_direction", "TEXT"),
+        ):
+            if column not in endpoint_event_columns:
+                get_db().execute(f"ALTER TABLE endpoint_events ADD COLUMN {column} {sql_type}")
+        get_db().commit()
         scan_columns = {row["name"] for row in get_db().execute("PRAGMA table_info(scans)").fetchall()}
         if "user_hidden_at" not in scan_columns:
             get_db().execute("ALTER TABLE scans ADD COLUMN user_hidden_at TEXT")

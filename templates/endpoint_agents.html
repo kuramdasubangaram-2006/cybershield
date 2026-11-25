@@ -1,0 +1,63 @@
+{% extends "dashboard_base.html" %}
+{% block content %}
+  <section class="welcome-row">
+    <div><p class="eyebrow">ENDPOINT MONITORING</p><h2>Windows agents</h2><p>Connect a Windows device to send a small, selected set of security events to your account.</p></div>
+    <span class="panel-tag">USER-CONTROLLED</span>
+  </section>
+
+  {% if new_agent_token %}
+    <section class="content-panel agent-token-panel" aria-live="polite">
+      <div class="panel-heading"><div><h3>Copy this device token now</h3><p>It is shown once and cannot be retrieved later. Anyone with it can send events as this device.</p></div></div>
+      <label class="form-label" for="new-agent-token">Private agent token</label>
+      <textarea id="new-agent-token" class="form-control agent-token-value" rows="2" readonly>{{ new_agent_token }}</textarea>
+      <button class="btn sign-in-button mt-2" type="button" data-copy-token>Copy token</button>
+    </section>
+  {% endif %}
+
+  <section class="content-panel">
+    <div class="panel-heading"><div><h3>Connect a Windows device</h3><p>The agent reads only the listed Windows event IDs. It does not execute commands, collect full event text, or allow remote control.</p></div></div>
+    <ol class="agent-setup-steps">
+      <li>Create a device token below and copy it. Keep it private.</li>
+      <li>Download the PowerShell agent and inspect the script before running it.</li>
+      <li>Run it in an elevated PowerShell window, paste the token when prompted, and leave the window open to monitor.</li>
+      <li>Revoke the device here to stop it sending events. Stop the script on the device too.</li>
+    </ol>
+    <p class="scanner-privacy-note">Only event IDs 4624, 4625, 1102, 1116, 1117, 5156, and 5157 are allowed. If Windows firewall auditing is enabled, network events can include source/destination IPs, ports, protocol, and direction. Usernames and full event messages are not sent.</p>
+    <div class="agent-action-row">
+      <a class="primary-link" href="{{ url_for('download_windows_agent') }}">Download Windows agent <span aria-hidden="true">↓</span></a>
+      <form method="post" class="agent-create-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="create">
+        <label class="visually-hidden" for="agent-name">Device name</label>
+        <input class="form-control" id="agent-name" name="name" maxlength="80" placeholder="Device name, e.g. My Windows PC" required>
+        <button class="btn sign-in-button" type="submit">Create device token</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="content-panel">
+    <div class="panel-heading"><div><h3>Your devices</h3><p>Only devices connected to your account appear here.</p></div></div>
+    {% if agents %}
+      <div class="table-responsive"><table class="data-table"><thead><tr><th>Device</th><th>Status</th><th>Last seen</th><th>Created</th><th>Access</th></tr></thead><tbody>
+        {% for agent in agents %}
+          <tr>
+            <td>{{ agent.name }}</td>
+            <td>{% if agent.revoked_at %}<span class="risk-pill">Revoked</span>{% elif agent.online %}<span class="agent-status-indicator agent-online">Online</span>{% elif agent.last_seen_at %}<span class="agent-status-indicator">Offline</span>{% else %}<span class="agent-status-indicator">Not connected yet</span>{% endif %}</td>
+            <td>{{ agent.last_seen_at|ist_datetime if agent.last_seen_at else "Not connected" }}</td>
+            <td>{{ agent.created_at|ist_datetime }}</td>
+            <td>{% if not agent.revoked_at %}<form method="post" action="{{ url_for('revoke_agent', agent_id=agent.id) }}" onsubmit="return confirm('Revoke this device token? The agent will stop sending events.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="clear-history-button" type="submit">Revoke</button></form>{% else %}—{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody></table></div>
+    {% else %}
+      <div class="empty-state"><span class="empty-icon">⌁</span><strong>No devices connected</strong><p>Create a token and run the Windows agent on your own device to begin receiving real events.</p></div>
+    {% endif %}
+  </section>
+  <script>
+    document.querySelector('[data-copy-token]')?.addEventListener('click', async () => {
+      const token = document.getElementById('new-agent-token');
+      try { await navigator.clipboard.writeText(token.value); }
+      catch { token.focus(); token.select(); document.execCommand('copy'); }
+    });
+  </script>
+{% endblock %}

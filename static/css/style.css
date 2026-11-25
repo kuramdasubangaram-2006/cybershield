@@ -1931,3 +1931,31 @@ body.login-page.auth-screen .login-card .form-control:hover {
 .dashboard-page .dashboard-content :is(p, small, label, td),
 .dashboard-page .dashboard-topbar small,
 .dashboard-page .sidebar-bottom { font-weight: 500; }
+
+/* User-controlled Windows event agent panels */
+.endpoint-monitor-panel,
+.agent-token-panel { border-color: rgba(75, 194, 245, .32); background: linear-gradient(145deg, rgba(8, 27, 51, .54), rgba(9, 17, 39, .48)); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.agent-live-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; margin: 4px 0 13px; }
+.agent-live-stats > div { display: grid; gap: 4px; min-width: 0; padding: 12px 14px; border: 1px solid rgba(83, 159, 226, .2); border-radius: 10px; background: rgba(19, 42, 76, .58); }
+.agent-live-stats > div > span { color: #a9c4e6; font-size: .76rem; }
+.agent-live-stats > div > strong { color: #83eaff; font-size: 1.38rem; }
+.agent-live-status { margin: 0 0 12px; padding: 9px 11px; border: 1px solid rgba(255, 184, 77, .28); border-radius: 8px; background: rgba(124, 77, 31, .17); color: #ffdda7; font-size: .82rem; }
+.agent-live-status.agent-feed-online { border-color: rgba(57, 217, 172, .32); background: rgba(20, 113, 88, .16); color: #9bf3d7; }
+.agent-live-status.agent-feed-warning { border-color: rgba(255, 128, 113, .35); background: rgba(131, 43, 55, .19); color: #ffc1b8; }
+.agent-severity { display: inline-block; width: fit-content; padding: 3px 8px; border: 1px solid rgba(141, 165, 197, .25); border-radius: 999px; background: rgba(118, 140, 174, .14); color: #d4deed; font-size: .72rem; font-weight: 750; }
+.agent-severity-high { border-color: rgba(255, 95, 122, .36); background: rgba(255, 75, 103, .15); color: #ffafbd; }
+.agent-severity-medium { border-color: rgba(255, 184, 77, .34); background: rgba(255, 184, 77, .14); color: #ffda9c; }
+.agent-severity-low { border-color: rgba(85, 184, 255, .34); background: rgba(85, 184, 255, .13); color: #a9dcff; }
+.agent-severity-info { border-color: rgba(80, 220, 199, .32); background: rgba(80, 220, 199, .12); color: #a6f2e5; }
+.agent-setup-steps { display: grid; gap: 8px; padding-left: 1.3rem; color: #d8e7f8; font-size: .88rem; }
+.agent-action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 13px; }
+.agent-create-form { display: flex; flex: 1 1 440px; flex-wrap: wrap; align-items: center; gap: 9px; }
+.agent-create-form .form-control { flex: 1 1 210px; min-width: 0; }
+.agent-token-value { color: #b9f2ff; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.agent-status-indicator { color: #c6d6ec; }
+.agent-status-indicator.agent-online { color: #83f0c9; }
+@media (max-width: 600px) {
+  .agent-live-stats { grid-template-columns: 1fr; }
+  .agent-create-form { flex-basis: 100%; }
+  .agent-create-form > * { width: 100%; }
+}

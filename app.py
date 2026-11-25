@@ -5,6 +5,7 @@ import csv
 import hashlib
 import hmac
 import http.client
+import ipaddress
 import io
 import json
 import os
@@ -253,6 +254,42 @@ def analyze_url_live(value):
         result["summary"] = "The page includes a password field but its final destination is not using HTTPS."
         result["recommendations"].insert(0, "Do not enter a password on this page. Verify the correct HTTPS address independently.")
     return result
+
+
+WINDOWS_AGENT_EVENT_RULES = {
+    ("security", 4624): ("Windows sign-in succeeded", None, None),
+    ("security", 4625): ("Windows sign-in failed", None, None),
+    ("security", 5156): ("Windows Firewall allowed a network connection", None, None),
+    ("security", 5157): ("Windows Firewall blocked a network connection", None, None),
+    ("security", 1102): ("Windows Security audit log cleared", "High", "The Windows Security audit log was cleared. Review the device and account activity."),
+    ("microsoft-windows-windows defender/operational", 1116): ("Microsoft Defender threat detected", "High", "Microsoft Defender reported a threat on this device. Review the threat in Windows Security."),
+    ("microsoft-windows-windows defender/operational", 1117): ("Microsoft Defender action recorded", None, None),
+}
+
+
+def _parse_agent_time(value):
+    if not isinstance(value, str) or len(value) > 48:
+        raise ValueError("Invalid event timestamp.")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValueError("Invalid event timestamp.") from error
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _agent_is_online(last_seen_at, now=None):
+    if not last_seen_at:
+        return False
+    now = now or datetime.now(timezone.utc)
+    try:
+        seen = last_seen_at if isinstance(last_seen_at, datetime) else datetime.fromisoformat(str(last_seen_at).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if seen.tzinfo is None:
+        seen = seen.replace(tzinfo=timezone.utc)
+    return timedelta(0) <= now - seen.astimezone(timezone.utc) <= timedelta(seconds=90)
 
 
 def create_app():
@@ -728,6 +765,307 @@ def create_app():
             page_title="Admin Activity Log",
             events=events,
         )
+
+    @app.route("/account/agents", methods=["GET", "POST"])
+    @login_required
+    def manage_agents():
+        user = get_current_user()
+        db = get_db()
+        new_agent_token = None
+        if request.method == "POST":
+            if not validate_csrf():
+                abort(400)
+            action = request.form.get("action", "create")
+            if action != "create":
+                abort(400)
+            name = request.form.get("name", "").strip()
+            if not name or len(name) > 80:
+                flash("Enter a device name up to 80 characters long.", "error")
+            else:
+                active_count = db.execute(
+                    "SELECT COUNT(*) AS count FROM endpoint_agents WHERE user_id = ? AND revoked_at IS NULL",
+                    (user["id"],),
+                ).fetchone()["count"]
+                if active_count >= 10:
+                    flash("Maximum 10 active Windows agents per account. Revoke one before adding another.", "error")
+                else:
+                    new_agent_token = secrets.token_urlsafe(32)
+                    token_hash = hashlib.sha256(new_agent_token.encode("utf-8")).hexdigest()
+                    db.execute(
+                        "INSERT INTO endpoint_agents (user_id, name, token_hash) VALUES (?, ?, ?)",
+                        (user["id"], name, token_hash),
+                    )
+                    db.commit()
+        agents = db.execute(
+            "SELECT id, name, created_at, last_seen_at, revoked_at "
+            "FROM endpoint_agents WHERE user_id = ? ORDER BY id DESC",
+            (user["id"],),
+        ).fetchall()
+        agents = [dict(agent) | {"online": _agent_is_online(agent["last_seen_at"])} for agent in agents]
+        return render_template(
+            "endpoint_agents.html",
+            page_title="Windows Agents",
+            agents=agents,
+            new_agent_token=new_agent_token,
+        )
+
+    @app.post("/account/agents/<int:agent_id>/revoke")
+    @login_required
+    def revoke_agent(agent_id):
+        if not validate_csrf():
+            abort(400)
+        user = get_current_user()
+        db = get_db()
+        db.execute(
+            "UPDATE endpoint_agents SET revoked_at = CURRENT_TIMESTAMP "
+            "WHERE id = ? AND user_id = ? AND revoked_at IS NULL",
+            (agent_id, user["id"]),
+        )
+        db.commit()
+        flash("Agent access revoked. Remove the agent from that Windows device too.", "success")
+        return redirect(url_for("manage_agents"))
+
+    @app.get("/account/agents/windows-agent.ps1")
+    @login_required
+    def download_windows_agent():
+        agent_path = Path(app.root_path) / "agent" / "windows_agent.ps1"
+        return send_file(agent_path, as_attachment=True, download_name="cybershield-windows-agent.ps1", mimetype="text/plain")
+
+    @app.get("/api/agent/dashboard")
+    @login_required
+    def agent_dashboard_data():
+        user = get_current_user()
+        db = get_db()
+        if user["role"] == "admin":
+            agents = db.execute(
+                "SELECT id, last_seen_at FROM endpoint_agents WHERE revoked_at IS NULL"
+            ).fetchall()
+            rows = db.execute(
+                "SELECT events.id, events.event_time, events.event_name, events.source_ip, events.source_port, "
+                "events.destination_ip, events.destination_port, events.network_protocol, events.network_direction, "
+                "events.alert_level, events.alert_text, agents.name AS agent_name, users.email AS account_email "
+                "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
+                "JOIN users ON users.id = agents.user_id WHERE agents.revoked_at IS NULL "
+                "ORDER BY events.id DESC LIMIT 20"
+            ).fetchall()
+            if current_app.config.get("DATABASE_URL"):
+                alert_count = db.execute(
+                    "SELECT COUNT(*) AS count FROM endpoint_events AS events "
+                    "JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
+                    "WHERE agents.revoked_at IS NULL AND events.alert_level IS NOT NULL "
+                    "AND events.created_at >= NOW() - INTERVAL '24 hours'"
+                ).fetchone()["count"]
+            else:
+                alert_count = db.execute(
+                    "SELECT COUNT(*) AS count FROM endpoint_events AS events "
+                    "JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
+                    "WHERE agents.revoked_at IS NULL AND events.alert_level IS NOT NULL "
+                    "AND datetime(events.created_at) >= datetime('now', '-1 day')"
+                ).fetchone()["count"]
+        else:
+            agents = db.execute(
+                "SELECT id, last_seen_at FROM endpoint_agents WHERE user_id = ? AND revoked_at IS NULL",
+                (user["id"],),
+            ).fetchall()
+            rows = db.execute(
+                "SELECT events.id, events.event_time, events.event_name, events.source_ip, events.source_port, "
+                "events.destination_ip, events.destination_port, events.network_protocol, events.network_direction, "
+                "events.alert_level, events.alert_text, agents.name AS agent_name "
+                "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
+                "WHERE agents.user_id = ? AND agents.revoked_at IS NULL "
+                "ORDER BY events.id DESC LIMIT 20",
+                (user["id"],),
+            ).fetchall()
+            if current_app.config.get("DATABASE_URL"):
+                alert_count = db.execute(
+                    "SELECT COUNT(*) AS count FROM endpoint_events AS events "
+                    "JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
+                    "WHERE agents.user_id = ? AND agents.revoked_at IS NULL "
+                    "AND events.alert_level IS NOT NULL AND events.created_at >= NOW() - INTERVAL '24 hours'",
+                    (user["id"],),
+                ).fetchone()["count"]
+            else:
+                alert_count = db.execute(
+                    "SELECT COUNT(*) AS count FROM endpoint_events AS events "
+                    "JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
+                    "WHERE agents.user_id = ? AND agents.revoked_at IS NULL "
+                    "AND events.alert_level IS NOT NULL AND datetime(events.created_at) >= datetime('now', '-1 day')",
+                    (user["id"],),
+                ).fetchone()["count"]
+
+        now = datetime.now(timezone.utc)
+        recent = []
+        for row in rows:
+            item = {
+                "event_time": str(row["event_time"]),
+                "event_name": row["event_name"],
+                "source_ip": row["source_ip"] or "Not present",
+                "source_port": row["source_port"],
+                "destination_ip": row["destination_ip"] or "Not present",
+                "destination_port": row["destination_port"],
+                "network_protocol": row["network_protocol"] or "",
+                "network_direction": row["network_direction"] or "",
+                "alert_level": row["alert_level"] or "Event",
+                "alert_text": row["alert_text"] or row["event_name"],
+                "agent_name": row["agent_name"],
+            }
+            if user["role"] == "admin":
+                item["account_email"] = row["account_email"]
+            recent.append(item)
+        return jsonify({
+            "connected": len(agents),
+            "online": sum(_agent_is_online(agent["last_seen_at"], now) for agent in agents),
+            "alerts_24h": alert_count,
+            "events": recent,
+            "refresh_seconds": 15,
+        })
+
+    @app.post("/api/agent/events")
+    def receive_agent_events():
+        if request.content_length and request.content_length > 512 * 1024:
+            return jsonify({"error": "Batch is too large."}), 413
+        authorization = request.headers.get("Authorization", "")
+        if not authorization.startswith("Bearer "):
+            return jsonify({"error": "Agent token required."}), 401
+        token = authorization[7:].strip()
+        if not token or len(token) > 256:
+            return jsonify({"error": "Invalid agent token."}), 401
+        db = get_db()
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        agent = db.execute(
+            "SELECT id, last_seen_at FROM endpoint_agents WHERE token_hash = ? AND revoked_at IS NULL",
+            (token_hash,),
+        ).fetchone()
+        if agent is None:
+            return jsonify({"error": "Agent token is invalid or revoked."}), 401
+        payload = request.get_json(silent=True)
+        events = payload.get("events") if isinstance(payload, dict) else None
+        if not isinstance(events, list) or len(events) > 500:
+            return jsonify({"error": "Send an events list containing at most 500 records."}), 400
+
+        validated = []
+        for item in events:
+            if not isinstance(item, dict):
+                return jsonify({"error": "Each event must be an object."}), 400
+            channel = item.get("channel")
+            event_id = item.get("event_id")
+            record_id = item.get("record_id")
+            if not isinstance(channel, str) or isinstance(event_id, bool) or not isinstance(event_id, int):
+                return jsonify({"error": "Event channel or ID is invalid."}), 400
+            canonical_channel = {
+                "security": "Security",
+                "microsoft-windows-windows defender/operational": "Microsoft-Windows-Windows Defender/Operational",
+            }.get(channel.strip().casefold())
+            rule = WINDOWS_AGENT_EVENT_RULES.get((channel.strip().casefold(), event_id))
+            if not canonical_channel or rule is None:
+                return jsonify({"error": "This Windows event is not in the accepted event list."}), 400
+            if isinstance(record_id, bool) or not str(record_id).isdigit() or len(str(record_id)) > 20:
+                return jsonify({"error": "Event record ID is invalid."}), 400
+            try:
+                event_time = _parse_agent_time(item.get("event_time"))
+            except ValueError as error:
+                return jsonify({"error": str(error)}), 400
+            raw_ip = item.get("source_ip")
+            source_ip = None
+            if raw_ip not in (None, "", "-"):
+                if not isinstance(raw_ip, str) or len(raw_ip) > 64:
+                    return jsonify({"error": "Source IP is invalid."}), 400
+                try:
+                    source_ip = str(ipaddress.ip_address(raw_ip.strip()))
+                except ValueError:
+                    return jsonify({"error": "Source IP is invalid."}), 400
+            destination_ip = None
+            raw_destination_ip = item.get("destination_ip")
+            if raw_destination_ip not in (None, "", "-"):
+                if not isinstance(raw_destination_ip, str) or len(raw_destination_ip) > 64:
+                    return jsonify({"error": "Destination IP is invalid."}), 400
+                try:
+                    destination_ip = str(ipaddress.ip_address(raw_destination_ip.strip()))
+                except ValueError:
+                    return jsonify({"error": "Destination IP is invalid."}), 400
+            ports = {}
+            for field in ("source_port", "destination_port"):
+                raw_port = item.get(field)
+                if raw_port in (None, "", "-"):
+                    ports[field] = None
+                elif (isinstance(raw_port, bool) or not str(raw_port).isdigit()
+                      or not 0 <= int(raw_port) <= 65535):
+                    return jsonify({"error": "Network port is invalid."}), 400
+                else:
+                    ports[field] = int(raw_port)
+            raw_protocol = item.get("network_protocol")
+            protocol = None
+            if raw_protocol not in (None, "", "-"):
+                if not isinstance(raw_protocol, str) or not raw_protocol.isdigit() or int(raw_protocol) > 255:
+                    return jsonify({"error": "Network protocol is invalid."}), 400
+                protocol = {"6": "TCP", "17": "UDP", "1": "ICMP"}.get(raw_protocol, f"IP protocol {int(raw_protocol)}")
+            raw_direction = item.get("network_direction")
+            direction = None
+            if raw_direction not in (None, "", "-"):
+                if raw_direction not in ("Inbound", "Outbound"):
+                    return jsonify({"error": "Network direction is invalid."}), 400
+                direction = raw_direction
+            event_name, alert_level, alert_text = rule
+            validated.append({
+                "source_ref": f"{canonical_channel.casefold()}:{record_id}",
+                "event_time": event_time.isoformat(timespec="seconds"),
+                "channel": canonical_channel,
+                "event_id": event_id,
+                "source_ip": source_ip,
+                "source_port": ports["source_port"],
+                "destination_ip": destination_ip,
+                "destination_port": ports["destination_port"],
+                "network_protocol": protocol,
+                "network_direction": direction,
+                "event_name": event_name,
+                "alert_level": alert_level,
+                "alert_text": alert_text,
+            })
+
+        accepted = 0
+        alerts_created = 0
+        for event in validated:
+            cursor = db.execute(
+                "INSERT INTO endpoint_events "
+                "(agent_id, source_ref, event_time, channel, event_id, source_ip, source_port, destination_ip, "
+                "destination_port, network_protocol, network_direction, event_name, alert_level, alert_text) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(agent_id, source_ref) DO NOTHING RETURNING id",
+                (agent["id"], event["source_ref"], event["event_time"], event["channel"], event["event_id"],
+                 event["source_ip"], event["source_port"], event["destination_ip"], event["destination_port"],
+                 event["network_protocol"], event["network_direction"], event["event_name"],
+                 event["alert_level"], event["alert_text"]),
+            )
+            inserted = cursor.fetchone()
+            if inserted is None:
+                continue
+            accepted += 1
+            if event["event_id"] == 4625 and event["source_ip"]:
+                if current_app.config.get("DATABASE_URL"):
+                    failures = db.execute(
+                        "SELECT COUNT(*) AS count FROM endpoint_events WHERE agent_id = ? AND event_id = 4625 "
+                        "AND source_ip = ? AND created_at >= NOW() - INTERVAL '5 minutes'",
+                        (agent["id"], event["source_ip"]),
+                    ).fetchone()["count"]
+                else:
+                    failures = db.execute(
+                        "SELECT COUNT(*) AS count FROM endpoint_events WHERE agent_id = ? AND event_id = 4625 "
+                        "AND source_ip = ? AND datetime(created_at) >= datetime('now', '-5 minutes')",
+                        (agent["id"], event["source_ip"]),
+                    ).fetchone()["count"]
+                if failures == 5:
+                    event["alert_level"] = "High"
+                    event["alert_text"] = "Five failed Windows sign-ins from the same IP within five minutes. Verify whether they were expected."
+                    db.execute(
+                        "UPDATE endpoint_events SET alert_level = ?, alert_text = ? WHERE id = ?",
+                        (event["alert_level"], event["alert_text"], inserted["id"]),
+                    )
+            if event["alert_level"]:
+                alerts_created += 1
+
+        db.execute("UPDATE endpoint_agents SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?", (agent["id"],))
+        db.commit()
+        return jsonify({"accepted": accepted, "alerts_created": alerts_created})
 
     @app.route("/tools/ip", methods=["GET", "POST"])
     @scan_access
