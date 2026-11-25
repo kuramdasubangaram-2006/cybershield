@@ -9,8 +9,16 @@
     <div><span>Alerts, last 24h</span><strong data-agent-alert-count>—</strong></div>
   </div>
   <div class="agent-live-status" data-agent-status role="status">Connecting to agent event feed…</div>
-  <div class="table-responsive">
-    <table class="data-table"><thead><tr><th>Device</th>{% if current_user.role == 'admin' %}<th>Account</th>{% endif %}<th>Event ID</th><th>Log source</th><th>Record ID</th><th>Event</th><th>Source IP:port</th><th>Destination IP:port</th><th>Direction / protocol</th><th>Severity</th><th>Event time</th><th>Details</th></tr></thead>
+  <form class="agent-filter-form" data-agent-filter-form>
+    <label for="agent-spl-filter">SPL-style log filter</label>
+    <div class="agent-filter-controls"><input id="agent-spl-filter" class="form-control" data-agent-filter maxlength="256" placeholder="search event_id=4625 AND severity=High"><button class="btn sign-in-button" type="submit">Run filter</button><button class="clear-history-button" type="button" data-agent-clear-filter>Clear</button></div>
+    <p>Examples: <code>search source_ip contains 192.0.2</code> | <code>search event_id=5157 | stats count by destination_ip</code>. Supports search/where, table, sort, head, and stats count by; up to 100 matching events are shown. It is a limited SPL-style filter, not full Splunk SPL.</p>
+  </form>
+  <div class="table-responsive agent-stats-wrap" data-agent-stats-wrap hidden>
+    <table class="data-table"><thead><tr><th data-agent-stats-heading>Group</th><th>Count</th></tr></thead><tbody data-agent-stats></tbody></table>
+  </div>
+  <div class="table-responsive" data-agent-events-wrap>
+    <table class="data-table"><thead><tr><th data-field="device">Device</th>{% if current_user.role == 'admin' %}<th data-field="account_email">Account</th>{% endif %}<th data-field="event_id">Event ID</th><th data-field="log_source">Log source</th><th data-field="record_id">Record ID</th><th data-field="event_name">Event</th><th data-field="source_address">Source IP:port</th><th data-field="destination_address">Destination IP:port</th><th data-field="network_context">Direction / protocol</th><th data-field="alert_level">Severity</th><th data-field="event_time">Event time</th><th data-field="details">Details</th></tr></thead>
       <tbody data-agent-events><tr><td colspan="{% if current_user.role == 'admin' %}12{% else %}11{% endif %}">Loading event feed…</td></tr></tbody>
     </table>
   </div>

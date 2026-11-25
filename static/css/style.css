@@ -1963,6 +1963,15 @@ body.login-page.auth-screen .login-card .form-control:hover {
 .agent-event-details p { min-width: 180px; max-width: 280px; margin: 6px 0 0; color: #d4e3f5; font-size: .76rem; white-space: normal; }
 .agent-report-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .agent-report-panel .panel-heading { align-items: flex-start; }
+.agent-filter-form { display: grid; gap: 7px; margin: 12px 0; padding: 12px; border: 1px solid rgba(83, 159, 226, .2); border-radius: 9px; background: rgba(6, 17, 36, .34); }
+.agent-filter-form > label { color: #b9eaff; font-size: .8rem; font-weight: 750; }
+.agent-filter-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.agent-filter-controls .form-control { flex: 1 1 300px; min-width: 0; color: #d8f5ff; font-family: ui-monospace, Consolas, monospace; }
+.agent-filter-form > p { margin: 0; color: #b3c5dd; font-size: .72rem; line-height: 1.6; }
+.agent-filter-form > p code { color: #92e9ff; white-space: normal; }
+.agent-stats-wrap { margin-bottom: 12px; }
+.agent-stats-wrap[hidden],
+[data-agent-events-wrap][hidden] { display: none !important; }
 @media (max-width: 600px) {
   .agent-live-stats { grid-template-columns: 1fr; }
   .agent-create-form { flex-basis: 100%; }

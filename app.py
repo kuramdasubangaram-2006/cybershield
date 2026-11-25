@@ -9,7 +9,9 @@ import ipaddress
 import io
 import json
 import os
+import re
 import secrets
+import shlex
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -290,6 +292,241 @@ def _agent_is_online(last_seen_at, now=None):
     if seen.tzinfo is None:
         seen = seen.replace(tzinfo=timezone.utc)
     return timedelta(0) <= now - seen.astimezone(timezone.utc) <= timedelta(seconds=90)
+
+
+def _agent_spl_filter(query, is_admin, record_id_expression):
+    """Compile safe search/where predicates from the supported SPL-style subset."""
+    query = str(query or "").strip()
+    if not query:
+        return "", []
+    tokens = shlex.split(query)
+
+    fields = {
+        "event_id": "CAST(events.event_id AS TEXT)",
+        "event": "events.event_name",
+        "event_name": "events.event_name",
+        "source": "events.channel",
+        "channel": "events.channel",
+        "log_source": "events.channel",
+        "record_id": record_id_expression,
+        "device": "agents.name",
+        "host": "agents.name",
+        "severity": "COALESCE(events.alert_level, 'Event')",
+        "source_ip": "events.source_ip",
+        "src_ip": "events.source_ip",
+        "destination_ip": "events.destination_ip",
+        "dest_ip": "events.destination_ip",
+        "source_port": "CAST(events.source_port AS TEXT)",
+        "src_port": "CAST(events.source_port AS TEXT)",
+        "destination_port": "CAST(events.destination_port AS TEXT)",
+        "dest_port": "CAST(events.destination_port AS TEXT)",
+        "protocol": "events.network_protocol",
+        "direction": "events.network_direction",
+        "alert": "COALESCE(events.alert_text, '')",
+        "details": "COALESCE(events.alert_text, '')",
+    }
+    searchable = [
+        "events.event_name", "events.channel", "events.source_ref", "agents.name",
+        "COALESCE(events.alert_text, '')", "COALESCE(events.source_ip, '')",
+        "COALESCE(events.destination_ip, '')", "COALESCE(events.network_protocol, '')",
+        "COALESCE(events.network_direction, '')", "CAST(events.event_id AS TEXT)",
+        "COALESCE(events.alert_level, 'Event')",
+    ]
+    if is_admin:
+        fields["account"] = "users.email"
+        fields["user"] = "users.email"
+        searchable.append("users.email")
+
+    clauses = []
+    parameters = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token.casefold() == "and":
+            index += 1
+            continue
+        if token.casefold() == "or" or token == "|":
+            raise ValueError("This display filter supports AND, not OR or pipe commands.")
+        if "=" in token:
+            field, value = token.split("=", 1)
+            operator = "="
+            index += 1
+        elif index + 2 < len(tokens) and tokens[index + 1].casefold() == "contains":
+            field, operator, value = token, "contains", tokens[index + 2]
+            index += 3
+        else:
+            field, operator, value = "", "contains", token
+            index += 1
+        field = field.casefold()
+        if field and field not in fields:
+            raise ValueError(f"Unknown field '{field}'. Check the supported fields below the filter.")
+        if not value:
+            raise ValueError("Add a value after the filter field.")
+        if field:
+            expression = fields[field]
+            if operator == "=":
+                clauses.append(f"LOWER(COALESCE({expression}, '')) = LOWER(?)")
+                parameters.append(value)
+            else:
+                clauses.append(f"LOWER(COALESCE({expression}, '')) LIKE LOWER(?)")
+                parameters.append(f"%{value}%")
+        else:
+            clauses.append("(" + " OR ".join(
+                f"LOWER(COALESCE({expression}, '')) LIKE LOWER(?)" for expression in searchable
+            ) + ")")
+            parameters.extend([f"%{value}%"] * len(searchable))
+    if not clauses:
+        return "", []
+    return " AND ".join(clauses), parameters
+
+
+def _agent_spl_query(query, is_admin, record_id_expression):
+    """Parse a small, documented SPL-style subset without evaluating user code."""
+    query = str(query or "").strip()
+    if len(query) > 256:
+        raise ValueError("Filter is too long (maximum 256 characters).")
+    segments = []
+    current = []
+    quote = None
+    escaped = False
+    for character in query:
+        if escaped:
+            current.append(character)
+            escaped = False
+        elif character == "\\" and quote:
+            current.append(character)
+            escaped = True
+        elif quote:
+            current.append(character)
+            if character == quote:
+                quote = None
+        elif character in ("'", '"'):
+            quote = character
+            current.append(character)
+        elif character == "|":
+            segments.append("".join(current).strip())
+            current = []
+        else:
+            current.append(character)
+    if quote:
+        raise ValueError("Check the quotes in your filter.")
+    segments.append("".join(current).strip())
+
+    filter_text = ""
+    display_fields = None
+    sort_column = "events.id"
+    sort_direction = "DESC"
+    row_limit = 100
+    stats_by = None
+    pipeline_modifiers = []
+    display_aliases = {
+        "device": "device", "host": "device",
+        "account": "account_email", "user": "account_email",
+        "event_id": "event_id", "source": "log_source", "channel": "log_source", "log_source": "log_source",
+        "record_id": "record_id", "event": "event_name", "event_name": "event_name",
+        "source_ip": "source_address", "src_ip": "source_address",
+        "destination_ip": "destination_address", "dest_ip": "destination_address",
+        "source_port": "source_address", "src_port": "source_address",
+        "destination_port": "destination_address", "dest_port": "destination_address",
+        "protocol": "network_context", "direction": "network_context",
+        "severity": "alert_level", "alert": "details", "details": "details",
+        "event_time": "event_time", "_time": "event_time",
+    }
+    sort_fields = {
+        "event_time": "events.event_time", "_time": "events.event_time",
+        "event_id": "events.event_id", "severity": "COALESCE(events.alert_level, 'Event')",
+        "device": "agents.name", "host": "agents.name",
+    }
+    stats_fields = {
+        "event_id": ("event_id", "CAST(events.event_id AS TEXT)"),
+        "severity": ("severity", "COALESCE(events.alert_level, 'Event')"),
+        "source_ip": ("source_ip", "events.source_ip"),
+        "src_ip": ("source_ip", "events.source_ip"),
+        "destination_ip": ("destination_ip", "events.destination_ip"),
+        "dest_ip": ("destination_ip", "events.destination_ip"),
+        "log_source": ("log_source", "events.channel"),
+        "channel": ("log_source", "events.channel"),
+        "event_name": ("event_name", "events.event_name"),
+        "device": ("device", "agents.name"),
+        "host": ("device", "agents.name"),
+        "protocol": ("protocol", "events.network_protocol"),
+        "direction": ("direction", "events.network_direction"),
+        "record_id": ("record_id", record_id_expression),
+    }
+    if is_admin:
+        stats_fields["account"] = ("account", "users.email")
+
+    for segment_index, segment in enumerate(segments):
+        if not segment:
+            continue
+        try:
+            tokens = shlex.split(segment)
+        except ValueError as error:
+            raise ValueError("Check the quotes in your filter.") from error
+        if not tokens:
+            continue
+        command = tokens[0].casefold()
+        if segment_index == 0 and command in {"search", "where"}:
+            filter_text = segment[len(tokens[0]):].strip()
+            continue
+        if segment_index == 0 and command not in {"table", "sort", "head", "stats"}:
+            filter_text = segment
+            continue
+        if command in {"search", "where"}:
+            raise ValueError("Put search/where first, before the pipe commands.")
+        if command == "table":
+            pipeline_modifiers.append(command)
+            raw_fields = segment[len(tokens[0]):].replace(",", " ").strip()
+            try:
+                requested = [item.casefold() for item in shlex.split(raw_fields)]
+            except ValueError as error:
+                raise ValueError("Check the table field names and quotes.") from error
+            if not requested:
+                raise ValueError("Add one or more field names after table.")
+            unknown = [field for field in requested if field not in display_aliases or (field in {"account", "user"} and not is_admin)]
+            if unknown:
+                raise ValueError(f"Unsupported table field: {unknown[0]}.")
+            display_fields = list(dict.fromkeys(display_aliases[field] for field in requested))
+        elif command == "sort":
+            pipeline_modifiers.append(command)
+            if len(tokens) != 2:
+                raise ValueError("Use sort -_time or sort event_id.")
+            field_token = tokens[1]
+            sort_direction = "DESC" if field_token.startswith("-") else "ASC"
+            sort_name = field_token.lstrip("+-").casefold()
+            if sort_name not in sort_fields:
+                raise ValueError("Sort supports _time, event_time, event_id, severity, or device.")
+            sort_column = sort_fields[sort_name]
+        elif command == "head":
+            pipeline_modifiers.append(command)
+            if len(tokens) != 2 or not tokens[1].isdigit() or not 1 <= int(tokens[1]) <= 100:
+                raise ValueError("head supports a number from 1 to 100.")
+            row_limit = int(tokens[1])
+        elif command == "stats":
+            if segment_index != len(segments) - 1 or len(tokens) != 4 or tokens[1].casefold() != "count" or tokens[2].casefold() != "by":
+                raise ValueError("Supported stats syntax is: stats count by event_id.")
+            if pipeline_modifiers:
+                raise ValueError("Use stats count by on its own after search/where; do not combine it with table, sort, or head yet.")
+            field = tokens[3].casefold()
+            if field not in stats_fields:
+                raise ValueError("stats count by supports event_id, severity, IP, log_source, event_name, device, protocol, direction, or record_id.")
+            stats_by = stats_fields[field]
+        else:
+            raise ValueError(f"Unsupported SPL command '{tokens[0]}'. Try search, table, sort, head, or stats count by.")
+
+    if filter_text:
+        filter_sql, filter_parameters = _agent_spl_filter(filter_text, is_admin, record_id_expression)
+    else:
+        filter_sql, filter_parameters = "", []
+    return {
+        "filter_sql": filter_sql,
+        "filter_parameters": filter_parameters,
+        "display_fields": display_fields,
+        "sort_column": sort_column,
+        "sort_direction": sort_direction,
+        "limit": row_limit,
+        "stats_by": stats_by,
+    }
 
 
 def create_app():
@@ -894,18 +1131,44 @@ def create_app():
     def agent_dashboard_data():
         user = get_current_user()
         db = get_db()
+        query = request.args.get("q", "").strip()
+        record_id_expression = (
+            "split_part(events.source_ref, ':', 2)"
+            if current_app.config.get("DATABASE_URL")
+            else "substr(events.source_ref, instr(events.source_ref, ':') + 1)"
+        )
+        try:
+            spl = _agent_spl_query(
+                query, user["role"] == "admin", record_id_expression
+            )
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
+        filter_clause = f" AND ({spl['filter_sql']})" if spl["filter_sql"] else ""
+        row_parameters = spl["filter_parameters"]
+        sort_clause = f" ORDER BY {spl['sort_column']} {spl['sort_direction']}, events.id DESC LIMIT {spl['limit']}"
         if user["role"] == "admin":
             agents = db.execute(
                 "SELECT id, last_seen_at FROM endpoint_agents WHERE revoked_at IS NULL"
             ).fetchall()
-            rows = db.execute(
-                "SELECT events.id, events.source_ref, events.channel, events.event_time, events.event_id, events.event_name, events.source_ip, events.source_port, "
-                "events.destination_ip, events.destination_port, events.network_protocol, events.network_direction, "
-                "events.alert_level, events.alert_text, agents.name AS agent_name, users.email AS account_email "
-                "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
-                "JOIN users ON users.id = agents.user_id WHERE agents.revoked_at IS NULL "
-                "ORDER BY events.id DESC LIMIT 20"
-            ).fetchall()
+            if spl["stats_by"]:
+                stats_label, stats_expression = spl["stats_by"]
+                rows = db.execute(
+                    f"SELECT {stats_expression} AS group_value, COUNT(*) AS count "
+                    "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
+                    "JOIN users ON users.id = agents.user_id WHERE agents.revoked_at IS NULL "
+                    + filter_clause + f" GROUP BY {stats_expression} ORDER BY count DESC LIMIT {spl['limit']}",
+                    tuple(row_parameters),
+                ).fetchall()
+            else:
+                rows = db.execute(
+                    "SELECT events.id, events.source_ref, events.channel, events.event_time, events.event_id, events.event_name, events.source_ip, events.source_port, "
+                    "events.destination_ip, events.destination_port, events.network_protocol, events.network_direction, "
+                    "events.alert_level, events.alert_text, agents.name AS agent_name, users.email AS account_email "
+                    "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
+                    "JOIN users ON users.id = agents.user_id WHERE agents.revoked_at IS NULL "
+                    + filter_clause + sort_clause,
+                    tuple(row_parameters),
+                ).fetchall()
             if current_app.config.get("DATABASE_URL"):
                 alert_count = db.execute(
                     "SELECT COUNT(*) AS count FROM endpoint_events AS events "
@@ -925,15 +1188,25 @@ def create_app():
                 "SELECT id, last_seen_at FROM endpoint_agents WHERE user_id = ? AND revoked_at IS NULL",
                 (user["id"],),
             ).fetchall()
-            rows = db.execute(
-                "SELECT events.id, events.source_ref, events.channel, events.event_time, events.event_id, events.event_name, events.source_ip, events.source_port, "
-                "events.destination_ip, events.destination_port, events.network_protocol, events.network_direction, "
-                "events.alert_level, events.alert_text, agents.name AS agent_name "
-                "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
-                "WHERE agents.user_id = ? AND agents.revoked_at IS NULL "
-                "ORDER BY events.id DESC LIMIT 20",
-                (user["id"],),
-            ).fetchall()
+            if spl["stats_by"]:
+                stats_label, stats_expression = spl["stats_by"]
+                rows = db.execute(
+                    f"SELECT {stats_expression} AS group_value, COUNT(*) AS count "
+                    "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
+                    "WHERE agents.user_id = ? AND agents.revoked_at IS NULL "
+                    + filter_clause + f" GROUP BY {stats_expression} ORDER BY count DESC LIMIT {spl['limit']}",
+                    (user["id"], *row_parameters),
+                ).fetchall()
+            else:
+                rows = db.execute(
+                    "SELECT events.id, events.source_ref, events.channel, events.event_time, events.event_id, events.event_name, events.source_ip, events.source_port, "
+                    "events.destination_ip, events.destination_port, events.network_protocol, events.network_direction, "
+                    "events.alert_level, events.alert_text, agents.name AS agent_name "
+                    "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
+                    "WHERE agents.user_id = ? AND agents.revoked_at IS NULL "
+                    + filter_clause + sort_clause,
+                    (user["id"], *row_parameters),
+                ).fetchall()
             if current_app.config.get("DATABASE_URL"):
                 alert_count = db.execute(
                     "SELECT COUNT(*) AS count FROM endpoint_events AS events "
@@ -953,7 +1226,7 @@ def create_app():
 
         now = datetime.now(timezone.utc)
         recent = []
-        for row in rows:
+        for row in ([] if spl["stats_by"] else rows):
             item = {
                 "event_time": str(row["event_time"]),
                 "event_id": row["event_id"],
@@ -973,12 +1246,20 @@ def create_app():
             if user["role"] == "admin":
                 item["account_email"] = row["account_email"]
             recent.append(item)
+        stats_rows = [
+            {"group_value": row["group_value"] if row["group_value"] is not None else "Not present", "count": row["count"]}
+            for row in rows
+        ] if spl["stats_by"] else None
         return jsonify({
             "connected": len(agents),
             "online": sum(_agent_is_online(agent["last_seen_at"], now) for agent in agents),
             "alerts_24h": alert_count,
             "events": recent,
+            "stats": stats_rows,
+            "stats_field": spl["stats_by"][0] if spl["stats_by"] else None,
+            "display_fields": spl["display_fields"],
             "refresh_seconds": 15,
+            "filter_query": query,
         })
 
     @app.post("/api/agent/events")
