@@ -1034,8 +1034,10 @@ def create_app():
                     )
                     db.commit()
         agents = db.execute(
-            "SELECT id, name, created_at, last_seen_at, revoked_at "
-            "FROM endpoint_agents WHERE user_id = ? ORDER BY id DESC",
+            "SELECT agents.id, agents.name, agents.created_at, agents.last_seen_at, agents.agent_version, "
+            "agents.warning_channels, agents.revoked_at, "
+            "(SELECT MAX(events.event_time) FROM endpoint_events AS events WHERE events.agent_id = agents.id) AS last_event_at "
+            "FROM endpoint_agents AS agents WHERE agents.user_id = ? ORDER BY agents.id DESC",
             (user["id"],),
         ).fetchall()
         agents = [dict(agent) | {"online": _agent_is_online(agent["last_seen_at"])} for agent in agents]
@@ -1132,6 +1134,17 @@ def create_app():
         user = get_current_user()
         db = get_db()
         query = request.args.get("q", "").strip()
+        time_range = request.args.get("range", "24h")
+        range_sql = {
+            "1h": ("events.event_time >= NOW() - INTERVAL '1 hour'", "datetime(events.event_time) >= datetime('now', '-1 hour')"),
+            "24h": ("events.event_time >= NOW() - INTERVAL '24 hours'", "datetime(events.event_time) >= datetime('now', '-24 hours')"),
+            "7d": ("events.event_time >= NOW() - INTERVAL '7 days'", "datetime(events.event_time) >= datetime('now', '-7 days')"),
+            "all": ("", ""),
+        }
+        if time_range not in range_sql:
+            return jsonify({"error": "Choose 1 hour, 24 hours, 7 days, or all available events."}), 400
+        range_clause = range_sql[time_range][0 if current_app.config.get("DATABASE_URL") else 1]
+        range_clause = f" AND ({range_clause})" if range_clause else ""
         record_id_expression = (
             "split_part(events.source_ref, ':', 2)"
             if current_app.config.get("DATABASE_URL")
@@ -1156,7 +1169,7 @@ def create_app():
                     f"SELECT {stats_expression} AS group_value, COUNT(*) AS count "
                     "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
                     "JOIN users ON users.id = agents.user_id WHERE agents.revoked_at IS NULL "
-                    + filter_clause + f" GROUP BY {stats_expression} ORDER BY count DESC LIMIT {spl['limit']}",
+                    + range_clause + filter_clause + f" GROUP BY {stats_expression} ORDER BY count DESC LIMIT {spl['limit']}",
                     tuple(row_parameters),
                 ).fetchall()
             else:
@@ -1166,7 +1179,7 @@ def create_app():
                     "events.alert_level, events.alert_text, agents.name AS agent_name, users.email AS account_email "
                     "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
                     "JOIN users ON users.id = agents.user_id WHERE agents.revoked_at IS NULL "
-                    + filter_clause + sort_clause,
+                    + range_clause + filter_clause + sort_clause,
                     tuple(row_parameters),
                 ).fetchall()
             if current_app.config.get("DATABASE_URL"):
@@ -1194,7 +1207,7 @@ def create_app():
                     f"SELECT {stats_expression} AS group_value, COUNT(*) AS count "
                     "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
                     "WHERE agents.user_id = ? AND agents.revoked_at IS NULL "
-                    + filter_clause + f" GROUP BY {stats_expression} ORDER BY count DESC LIMIT {spl['limit']}",
+                    + range_clause + filter_clause + f" GROUP BY {stats_expression} ORDER BY count DESC LIMIT {spl['limit']}",
                     (user["id"], *row_parameters),
                 ).fetchall()
             else:
@@ -1204,7 +1217,7 @@ def create_app():
                     "events.alert_level, events.alert_text, agents.name AS agent_name "
                     "FROM endpoint_events AS events JOIN endpoint_agents AS agents ON agents.id = events.agent_id "
                     "WHERE agents.user_id = ? AND agents.revoked_at IS NULL "
-                    + filter_clause + sort_clause,
+                    + range_clause + filter_clause + sort_clause,
                     (user["id"], *row_parameters),
                 ).fetchall()
             if current_app.config.get("DATABASE_URL"):
@@ -1260,6 +1273,7 @@ def create_app():
             "display_fields": spl["display_fields"],
             "refresh_seconds": 15,
             "filter_query": query,
+            "time_range": time_range,
         })
 
     @app.post("/api/agent/events")
@@ -1284,6 +1298,14 @@ def create_app():
         events = payload.get("events") if isinstance(payload, dict) else None
         if not isinstance(events, list) or len(events) > 500:
             return jsonify({"error": "Send an events list containing at most 500 records."}), 400
+        agent_version = payload.get("agent_version", "") if isinstance(payload, dict) else ""
+        if not isinstance(agent_version, str) or (agent_version and not re.fullmatch(r"[0-9A-Za-z._+-]{1,32}", agent_version)):
+            return jsonify({"error": "Agent version is invalid."}), 400
+        warning_channels = payload.get("warning_channels", []) if isinstance(payload, dict) else []
+        if (not isinstance(warning_channels, list) or len(warning_channels) > 2
+                or any(value not in ("Security", "Defender") for value in warning_channels)):
+            return jsonify({"error": "Agent warning channel list is invalid."}), 400
+        warning_channels = sorted(set(warning_channels))
 
         validated = []
         for item in events:
@@ -1405,7 +1427,19 @@ def create_app():
             if event["alert_level"]:
                 alerts_created += 1
 
-        db.execute("UPDATE endpoint_agents SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?", (agent["id"],))
+        update_fields = ["last_seen_at = CURRENT_TIMESTAMP"]
+        update_parameters = []
+        if agent_version:
+            update_fields.append("agent_version = ?")
+            update_parameters.append(agent_version)
+        if "warning_channels" in payload:
+            update_fields.append("warning_channels = ?")
+            update_parameters.append(",".join(warning_channels))
+        update_parameters.append(agent["id"])
+        db.execute(
+            f"UPDATE endpoint_agents SET {', '.join(update_fields)} WHERE id = ?",
+            tuple(update_parameters),
+        )
         db.commit()
         return jsonify({"accepted": accepted, "alerts_created": alerts_created})
 

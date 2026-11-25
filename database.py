@@ -110,6 +110,8 @@ def init_db(app):
                 token_hash TEXT NOT NULL UNIQUE,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 last_seen_at TEXT,
+                agent_version TEXT,
+                warning_channels TEXT NOT NULL DEFAULT '',
                 revoked_at TEXT
             );
 
@@ -151,6 +153,10 @@ def init_db(app):
         ):
             if column not in endpoint_event_columns:
                 get_db().execute(f"ALTER TABLE endpoint_events ADD COLUMN {column} {sql_type}")
+        endpoint_agent_columns = {row["name"] for row in get_db().execute("PRAGMA table_info(endpoint_agents)").fetchall()}
+        for column, sql_type in (("agent_version", "TEXT"), ("warning_channels", "TEXT NOT NULL DEFAULT ''")):
+            if column not in endpoint_agent_columns:
+                get_db().execute(f"ALTER TABLE endpoint_agents ADD COLUMN {column} {sql_type}")
         get_db().commit()
         scan_columns = {row["name"] for row in get_db().execute("PRAGMA table_info(scans)").fetchall()}
         if "user_hidden_at" not in scan_columns:

@@ -1967,6 +1967,10 @@ body.login-page.auth-screen .login-card .form-control:hover {
 .agent-filter-form > label { color: #b9eaff; font-size: .8rem; font-weight: 750; }
 .agent-filter-controls { display: flex; flex-wrap: wrap; gap: 8px; }
 .agent-filter-controls .form-control { flex: 1 1 300px; min-width: 0; color: #d8f5ff; font-family: ui-monospace, Consolas, monospace; }
+.agent-filter-range { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+.agent-filter-range > label { color: #b3c5dd; font-size: .78rem; font-weight: 700; }
+.agent-filter-range .form-control { width: min(100%, 230px); color: #d8f5ff; background-color: rgba(8, 22, 43, .84); border-color: rgba(98, 158, 221, .3); }
+.agent-status-warning { color: #ffd18a; }
 .agent-filter-form > p { margin: 0; color: #b3c5dd; font-size: .72rem; line-height: 1.6; }
 .agent-filter-form > p code { color: #92e9ff; white-space: normal; }
 .agent-stats-wrap { margin-bottom: 12px; }

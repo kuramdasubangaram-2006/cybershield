@@ -51,14 +51,15 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass</code></pre>
   </section>
 
   <section class="content-panel">
-    <div class="panel-heading"><div><h3>Your devices</h3><p>Only devices connected to your account appear here.</p></div></div>
+    <div class="panel-heading"><div><h3>Your devices</h3><p>Only devices connected to your account appear here. Agent version and Windows log read warnings are shown only when the agent reports them; no reported warning is not a full device health check.</p></div></div>
     {% if agents %}
-      <div class="table-responsive"><table class="data-table"><thead><tr><th>Device</th><th>Status</th><th>Last seen</th><th>Created</th><th>Access</th></tr></thead><tbody>
+      <div class="table-responsive"><table class="data-table"><thead><tr><th>Device</th><th>Connection</th><th>Check-in / last event</th><th>Agent / log read status</th><th>Created</th><th>Access</th></tr></thead><tbody>
         {% for agent in agents %}
           <tr>
             <td>{{ agent.name }}</td>
             <td>{% if agent.revoked_at %}<span class="risk-pill">Revoked</span>{% elif agent.online %}<span class="agent-status-indicator agent-online">Online</span>{% elif agent.last_seen_at %}<span class="agent-status-indicator">Offline</span>{% else %}<span class="agent-status-indicator">Not connected yet</span>{% endif %}</td>
-            <td>{{ agent.last_seen_at|ist_datetime if agent.last_seen_at else "Not connected" }}</td>
+            <td><strong>Last check-in:</strong> {{ agent.last_seen_at|ist_datetime if agent.last_seen_at else "Not received" }}<br><strong>Last event:</strong> {{ agent.last_event_at|ist_datetime if agent.last_event_at else "No events received" }}</td>
+            <td><strong>Version:</strong> {{ agent.agent_version or "Not reported by agent yet" }}<br><strong>Windows log read:</strong> {% if agent.warning_channels %}<span class="agent-status-warning">Agent reported warning: {{ agent.warning_channels|replace('Security', 'Security log')|replace('Defender', 'Defender log') }}</span>{% elif agent.agent_version %}No read warnings reported{% else %}Not reported yet{% endif %}</td>
             <td>{{ agent.created_at|ist_datetime }}</td>
             <td>{% if not agent.revoked_at %}<form method="post" action="{{ url_for('revoke_agent', agent_id=agent.id) }}" onsubmit="return confirm('Revoke this device token? The agent will stop sending events.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="clear-history-button" type="submit">Revoke</button></form>{% else %}—{% endif %}</td>
           </tr>

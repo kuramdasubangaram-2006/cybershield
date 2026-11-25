@@ -12,6 +12,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$AgentVersion = '1.1.0'
 
 Write-Host 'CyberShield Windows monitoring agent' -ForegroundColor Cyan
 Write-Host 'This agent sends only selected Windows event metadata over HTTPS.'
@@ -83,8 +84,8 @@ function Get-EventField {
 }
 
 function Send-AgentBatch {
-    param([object[]]$Events)
-    $body = @{ events = @($Events) } | ConvertTo-Json -Depth 5 -Compress
+    param([object[]]$Events, [string[]]$WarningChannels)
+    $body = @{ agent_version = $AgentVersion; warning_channels = @($WarningChannels); events = @($Events) } | ConvertTo-Json -Depth 5 -Compress
     Invoke-RestMethod -Method Post -Uri $Endpoint -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 20 | Out-Null
 }
 
@@ -104,6 +105,7 @@ Save-AgentState
 
 while ($true) {
     $batch = [System.Collections.Generic.List[object]]::new()
+    $warningChannels = [System.Collections.Generic.List[string]]::new()
     $nextCursors = @{}
     foreach ($channel in $channels) {
         $cursor = [long]$state.Cursors[$channel.Key]
@@ -141,6 +143,7 @@ while ($true) {
             $noMatchingEvents = $_.FullyQualifiedErrorId -match 'NoMatchingEventsFound' -or
                 $_.Exception.Message -match 'No events were found that match'
             if (-not $noMatchingEvents) {
+                $warningChannels.Add($channel.Key)
                 Write-Warning "Could not read new events from '$($channel.Name)': $($_.Exception.Message)"
             }
         }
@@ -148,7 +151,7 @@ while ($true) {
 
     try {
         # Empty batches are heartbeats, allowing the dashboard to show the device as online.
-        Send-AgentBatch -Events $batch.ToArray()
+        Send-AgentBatch -Events $batch.ToArray() -WarningChannels $warningChannels.ToArray()
         foreach ($key in $nextCursors.Keys) { $state.Cursors[$key] = $nextCursors[$key] }
         Save-AgentState
         if ($batch.Count -gt 0) { Write-Host "Sent $($batch.Count) selected event(s) at $(Get-Date -Format 'HH:mm:ss')." -ForegroundColor Green }

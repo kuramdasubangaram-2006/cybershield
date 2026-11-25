@@ -9,12 +9,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const alertValue = panel.querySelector("[data-agent-alert-count]");
   const filterForm = panel.querySelector("[data-agent-filter-form]");
   const filterInput = panel.querySelector("[data-agent-filter]");
+  const rangeSelect = panel.querySelector("[data-agent-time-range]");
   const clearFilter = panel.querySelector("[data-agent-clear-filter]");
   const eventsWrap = panel.querySelector("[data-agent-events-wrap]");
   const statsWrap = panel.querySelector("[data-agent-stats-wrap]");
   const statsBody = panel.querySelector("[data-agent-stats]");
   const statsHeading = panel.querySelector("[data-agent-stats-heading]");
   let activeFilter = "";
+  const rangeLabels = { "1h": "last hour", "24h": "last 24 hours", "7d": "last 7 days", all: "all available events" };
 
   const cell = (row, value, className, fieldName) => {
     const element = document.createElement("td");
@@ -105,6 +107,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const url = new URL(panel.dataset.apiUrl, window.location.href);
       if (activeFilter) url.searchParams.set("q", activeFilter);
+      url.searchParams.set("range", rangeSelect.value);
       const response = await fetch(url, { credentials: "same-origin", cache: "no-store" });
       const data = await response.json();
       if (!response.ok) throw new Error(response.status === 401 ? "Sign in again to view your agent feed." : (data.error || "Agent feed is temporarily unavailable."));
@@ -115,7 +118,7 @@ document.addEventListener("DOMContentLoaded", () => {
       else renderEvents(Array.isArray(data.events) ? data.events : [], data.display_fields);
       status.textContent = data.connected === 0
         ? "No Windows agent is connected. Create a token and start the agent on your Windows PC."
-        : `${data.online} device(s) online; ${Array.isArray(data.stats) ? data.stats.length + " grouped result(s)" : data.events.length + " matching event(s)"}; refreshed just now.`;
+        : `${data.online} device(s) online; ${Array.isArray(data.stats) ? data.stats.length + " grouped result(s)" : data.events.length + " matching event(s)"} in ${rangeLabels[data.time_range] || "selected time range"}; refreshed just now.`;
       status.classList.toggle("agent-feed-online", data.online > 0);
       status.classList.toggle("agent-feed-warning", data.connected > data.online);
     } catch (error) {
@@ -133,9 +136,11 @@ document.addEventListener("DOMContentLoaded", () => {
     activeFilter = filterInput.value.trim();
     refresh();
   });
+  rangeSelect.addEventListener("change", refresh);
   clearFilter.addEventListener("click", () => {
     filterInput.value = "";
     activeFilter = "";
+    rangeSelect.value = "24h";
     refresh();
   });
 
