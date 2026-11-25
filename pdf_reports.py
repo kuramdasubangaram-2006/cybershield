@@ -193,15 +193,13 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
                     story.append(Paragraph(f"<b>{label}:</b> {escape(_pdf_text(value)).replace(chr(10), '<br/>')}", small_style))
     if details.get("log_events"):
         events = details["log_events"]
-        if details.get("log_severity_counts"):
-            story.append(Paragraph("Input log severity levels", heading_style))
-            story.append(_severity_summary_chart(details["log_severity_counts"]))
-            story.append(paragraph("Counts use explicit priority labels from the input. Other labels remain unclassified; these counts are not CVSS scores or verified threat judgments.", small_style))
         if details.get("cvss_severity_counts") and sum(details["cvss_severity_counts"].values()):
-            story.append(Paragraph("CVSS v3.1 Base Score Distribution", heading_style))
-            story.append(_severity_summary_chart(details["cvss_severity_counts"]))
             unscored = details.get("cvss_unscored_count", 0)
-            story.append(paragraph(f"{unscored} log(s) had no complete v3.1 vector. CVSS scores vulnerability severity, not log activity.", small_style))
+            story.append(KeepTogether([
+                Paragraph("CVSS v3.1 Base Score Distribution", heading_style),
+                _severity_summary_chart(details["cvss_severity_counts"]),
+                paragraph(f"{unscored} log(s) had no complete v3.1 vector. CVSS scores vulnerability severity, not log activity.", small_style),
+            ]))
         elif details.get("cvss_severity_counts"):
             story.append(Paragraph("CVSS v3.1 Base Score Distribution", heading_style))
             story.append(paragraph("No complete CVSS v3.1 vectors in these logs; no CVSS scores assigned.", small_style))

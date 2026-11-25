@@ -619,7 +619,7 @@ def analyze_logs(value):
 
     patterns = {
         "authentication_failures": re.compile(
-            r"failed password|authentication failure|authentication failed|invalid user|login failed|failed login",
+            r"\bfailed(?:[\s_-]+)password\b|\bauthentication(?:[\s_-]+)(?:failure|failed)\b|\binvalid(?:[\s_-]+)user\b|\blogin(?:[\s_-]+)failed\b|\bfailed(?:[\s_-]+)login\b",
             re.IGNORECASE,
         ),
         "successful_logins": re.compile(

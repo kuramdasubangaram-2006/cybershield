@@ -75,15 +75,6 @@
   {% if details.log_events %}
     <section class="content-panel">
       <div class="panel-heading"><div><h3>Parsed log events and network details</h3><p>Every non-empty input line is included. Unlabelled addresses are not guessed as source or destination. CVSS describes vulnerability severity, not the overall log activity risk.</p></div></div>
-      {% if details.log_severity_counts %}
-        <div class="indicator-block"><h4>Input log severity levels</h4><p>Counts use explicit log labels; unlabeled or other levels appear under Unclassified. These counts are not CVSS scores.</p>
-          <div class="nessus-severity-bars" role="img" aria-label="Log severity counts">
-            {% for severity, count in details.log_severity_counts.items() %}
-              <div class="nessus-severity-row severity-{{ severity|lower }}"><span>{{ severity }}</span><span class="nessus-severity-track"><span class="nessus-bar-{{ severity|lower }}" style="width: {{ (count * 100 / (details.log_events|length))|round(1) }}%"></span></span><strong>{{ count }}</strong></div>
-            {% endfor %}
-          </div>
-        </div>
-      {% endif %}
       {% if details.cvss_severity_counts %}
         <div class="indicator-block cvss-chart-panel"><h4>CVSS v3.1 Base Score Distribution</h4>
           {% set scored_vectors = details.cvss_severity_counts.values()|sum %}
