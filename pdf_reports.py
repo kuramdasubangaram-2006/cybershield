@@ -90,7 +90,7 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
     small_style = ParagraphStyle("ReportSmall", parent=body_style, fontSize=8, leading=11)
     story = [
         Paragraph("CyberShield Scan Report", title_style),
-        Paragraph("A detailed record of the checks performed. This report is not a guarantee that the item is safe.", body_style),
+        Paragraph("A concise record of the checks performed and the evidence available.", body_style),
         Spacer(1, 2 * mm),
     ]
 
@@ -329,10 +329,31 @@ def build_scan_pdf(scan, details, risk_label, formatted_time):
             ("TOPPADDING", (0, 0), (-1, -1), 4),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ]))
-        story.append(KeepTogether([Paragraph("Checked facts", heading_style), facts_table]))
+        # Let long fact tables flow across pages instead of pushing the whole
+        # table to the next page and leaving a large blank area behind.
+        story.append(Paragraph("Checked facts", heading_style))
+        story.append(facts_table)
 
     add_section("Observed indicators", details.get("indicators") or [])
-    add_section("Suggested next steps", details.get("recommendations") or [])
+    recommendations = list(details.get("recommendations") or [])
+    if scan["module"] == "URL Scanner":
+        # The local URL check and page fetch can produce nearly identical
+        # generic advice. Merge that pair, while retaining specific actions
+        # such as the warning for an HTTP password form.
+        address_guidance = [
+            item for item in recommendations
+            if item.startswith("Confirm the website address independently")
+            or item.startswith("Verify the domain through a trusted channel")
+        ]
+        if len(address_guidance) > 1:
+            merged = (
+                "Verify the exact domain through a trusted channel before signing in or sharing sensitive information; "
+                "these public-page details are context, not a safety verdict."
+            )
+            first_index = next(i for i, item in enumerate(recommendations) if item in address_guidance)
+            recommendations = [item for item in recommendations if item not in address_guidance]
+            recommendations.insert(first_index, merged)
+    add_section("Suggested next steps", recommendations)
     if details.get("redirect_chain"):
         add_section("Redirect path", details["redirect_chain"])
     def footer(canvas, document):
